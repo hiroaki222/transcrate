@@ -9,7 +9,7 @@ Transcrate converts audio with ffmpeg and checks the result against what CDJs
 and XDJs actually accept: codecs, sample rates, bit depths and filesystems,
 taken from the manufacturers' manuals.
 
-**Status: early.** `transcrate devices` works. Conversion is not built yet.
+**Status: early.** `devices` and `check` work. Conversion is not built yet.
 
 ## Build
 
@@ -34,6 +34,32 @@ XDJ-XZ         2019     48k   48k    48k    48k    48k      -  sources disagree
 XDJ-RR         2018     48k   48k    48k    48k      -      -  no
 CDJ-2000NXS2   2016     48k   48k    96k    96k    96k    96k  no
 ```
+
+Ask what a file will play on. This one needs `ffprobe` on your PATH, which comes
+with ffmpeg:
+
+```sh
+cargo run -p transcrate-cli -- check ~/Music/track.flac
+```
+
+```
+~/Music/track.flac
+  FLAC 96 kHz 24-bit
+  plays on       CDJ-3000X, XDJ-AZ, OPUS-QUAD, CDJ-3000, CDJ-2000NXS2
+  XDJ-AN         96 kHz is not supported for FLAC
+  OMNIS-DUO      96 kHz is not supported for FLAC
+  XDJ-RX3        96 kHz is not supported for FLAC
+  XDJ-XZ         96 kHz is not supported for FLAC
+  XDJ-RR         FLAC is not supported
+```
+
+Narrow it to the gear you are actually taking:
+
+```sh
+cargo run -p transcrate-cli -- check ~/Music/*.flac --device cdj-3000,xdj-rr
+```
+
+It exits non-zero if anything is rejected, so it can gate a script.
 
 Tests and lints, the same three CI runs:
 

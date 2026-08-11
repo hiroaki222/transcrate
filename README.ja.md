@@ -8,7 +8,7 @@ Transcrate は ffmpeg で音声を変換し, その結果を CDJ / XDJ が実際
 範囲と照合する. コーデック, サンプリングレート, ビット深度, ファイルシステム —
 すべてメーカーの説明書に基づく.
 
-**開発初期.** `transcrate devices` は動く. 変換機能はまだない.
+**開発初期.** `devices` と `check` は動く. 変換機能はまだない.
 
 ## ビルド
 
@@ -33,6 +33,32 @@ XDJ-XZ         2019     48k   48k    48k    48k    48k      -  sources disagree
 XDJ-RR         2018     48k   48k    48k    48k      -      -  no
 CDJ-2000NXS2   2016     48k   48k    96k    96k    96k    96k  no
 ```
+
+手持ちのファイルがどの機種で鳴るかを調べる. こちらは `ffprobe` が PATH に必要
+(ffmpeg に同梱されている):
+
+```sh
+cargo run -p transcrate-cli -- check ~/Music/track.flac
+```
+
+```
+~/Music/track.flac
+  FLAC 96 kHz 24-bit
+  plays on       CDJ-3000X, XDJ-AZ, OPUS-QUAD, CDJ-3000, CDJ-2000NXS2
+  XDJ-AN         96 kHz is not supported for FLAC
+  OMNIS-DUO      96 kHz is not supported for FLAC
+  XDJ-RX3        96 kHz is not supported for FLAC
+  XDJ-XZ         96 kHz is not supported for FLAC
+  XDJ-RR         FLAC is not supported
+```
+
+実際に持っていく機材だけに絞ることもできる:
+
+```sh
+cargo run -p transcrate-cli -- check ~/Music/*.flac --device cdj-3000,xdj-rr
+```
+
+1 つでも弾かれた場合は非ゼロで終了するので, スクリプトの判定に使える.
 
 テストと lint. CI で走るものと同じ:
 
