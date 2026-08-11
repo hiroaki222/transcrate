@@ -1,0 +1,38 @@
+# Release notes are generated from the commit history, which is Conventional
+# Commits throughout. Nothing depends on pull request labels, so a tag pushed
+# from a local branch produces the same notes as one merged through a PR.
+
+[changelog]
+header = ""
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group }}
+{% for commit in commits %}
+- {{ commit.message | upper_first }}\
+{% if commit.breaking %} **(breaking)**{% endif %}\
+{% endfor %}
+{% endfor %}
+"""
+trim = true
+footer = ""
+
+[git]
+conventional_commits = true
+# Commits that do not parse as Conventional say nothing useful in a release.
+filter_unconventional = true
+filter_commits = true
+topo_order = false
+sort_commits = "newest"
+
+commit_parsers = [
+  { message = "^feat", group = "Features" },
+  { message = "^fix", group = "Fixes" },
+  { message = "^perf", group = "Performance" },
+  { message = "^refactor", group = "Refactoring" },
+  { message = "^docs", group = "Documentation" },
+  { message = "^test", group = "Tests" },
+  # Housekeeping and CI changes are real work but not news to a user.
+  { message = "^chore", skip = true },
+  { message = "^ci", skip = true },
+  { message = "^build", skip = true },
+]

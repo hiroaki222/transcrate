@@ -1,0 +1,16 @@
+# Rust
+/target
+
+# Node / frontend
+node_modules/
+dist/
+
+# Tauri
+/apps/gui/src-tauri/target/
+/apps/gui/src-tauri/gen/
+
+# ffmpeg sidecars, fetched at build time rather than committed
+/vendor/ffmpeg/
+
+# macOS
+.DS_Store

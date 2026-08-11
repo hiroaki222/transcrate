@@ -1,0 +1,38 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# 1.88 for let-chains, which keep the compatibility checks flat.
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/hiroaki222/transcrate"
+description = "Fast, DJ-oriented audio transcoder with CDJ/XDJ compatibility checking"
+
+[workspace.dependencies]
+transcrate-core = { path = "crates/transcrate-core" }
+
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Every public item would otherwise want a #[must_use], which says nothing here.
+must_use_candidate = "allow"
+# `device::DeviceProfile` reads better than the alternatives.
+module_name_repetitions = "allow"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
