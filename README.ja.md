@@ -109,6 +109,9 @@ cargo run -p transcrate-cli -- convert ~/Music/track.flac --to aiff
 タイトル・アーティスト・アルバム・ジャンル・キー・BPM は残す. ブラウザで
 探すために必要な情報だからである.
 
+`--keep-comment` を付けるとコメントは削除されない. 自分でキューのメモや
+Camelot キーを書き込んでいる場合はこちらを使う. 歌詞はどちらの場合も削除する.
+
 埋め込みアートワークも引き継ぐ. rekordbox と CDJ のブラウザが認識できる形で
 ストリームにラベルを付ける. `--no-artwork` を付けると削除する.
 

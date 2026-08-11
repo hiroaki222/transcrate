@@ -141,6 +141,14 @@ struct ConvertArgs {
     #[arg(long)]
     no_artwork: bool,
 
+    /// Keep the comment field, which is otherwise emptied.
+    ///
+    /// Cleared by default because that is where shops and rippers leave their
+    /// advertising, and a CDJ shows it next to the title. Worth keeping if you
+    /// put your own cue notes or a Camelot key there.
+    #[arg(long)]
+    keep_comment: bool,
+
     /// How many files to convert at once. Defaults to one per core.
     #[arg(short = 'j', long, value_name = "N")]
     jobs: Option<usize>,
@@ -185,14 +193,20 @@ fn run_convert(args: &ConvertArgs) -> ExitCode {
         }
     };
 
+    let base = if args.keep_comment {
+        MetadataPolicy::KEEPING_COMMENTS
+    } else {
+        target.metadata
+    };
+
     let target = Target {
         metadata: MetadataPolicy {
             artwork: if args.no_artwork {
                 Artwork::Remove
             } else {
-                target.metadata.artwork
+                base.artwork
             },
-            ..target.metadata
+            ..base
         },
         ..target
     };

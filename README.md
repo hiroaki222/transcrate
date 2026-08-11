@@ -111,6 +111,9 @@ Those two are where shops and rippers leave their advertising, and a CDJ puts
 the comment in the browser right next to the title. Title, artist, album, genre,
 key and BPM are what the browser is for, so they stay.
 
+`--keep-comment` leaves the comment alone, for anyone who keeps their own cue
+notes or a Camelot key there. The lyrics go either way.
+
 Embedded artwork rides along, labelled the way rekordbox and the CDJ browser
 expect to find it. `--no-artwork` drops it instead.
 

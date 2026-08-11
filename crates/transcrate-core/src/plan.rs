@@ -54,6 +54,14 @@ impl MetadataPolicy {
         clear: &["comment", "lyrics-eng"],
         artwork: Artwork::Keep,
     };
+
+    /// The same, for people who keep their own cue notes or a Camelot key in
+    /// the comment. The lyrics still go: nobody reads those off a CDJ, and
+    /// they are the other thing shops fill in.
+    pub const KEEPING_COMMENTS: Self = Self {
+        clear: &["lyrics-eng"],
+        artwork: Artwork::Keep,
+    };
 }
 
 /// What to convert into.
@@ -602,6 +610,25 @@ mod tests {
             args.iter().any(|arg| arg.contains("Album cover")),
             "artwork stream is not labelled: {args:?}"
         );
+    }
+
+    /// Plenty of people keep their own cue notes or a Camelot key in the
+    /// comment, so emptying it has to be a choice rather than a rule. The
+    /// lyrics go either way — nobody reads those off a CDJ.
+    #[test]
+    fn the_comment_can_be_kept() {
+        let kept = MetadataPolicy::KEEPING_COMMENTS;
+        assert!(!kept.clear.contains(&"comment"), "{:?}", kept.clear);
+        assert!(kept.clear.contains(&"lyrics-eng"), "{:?}", kept.clear);
+
+        let target = Target {
+            metadata: kept,
+            ..Target::CDJ_SAFE
+        };
+        let args = encode_args(&plan(&flac_source(), &target));
+
+        assert!(!pairs_contain(&args, "-metadata", "comment="), "{args:?}");
+        assert!(pairs_contain(&args, "-metadata", "lyrics-eng="), "{args:?}");
     }
 
     /// Shops and rippers leave their advertising in the comment, and a CDJ
