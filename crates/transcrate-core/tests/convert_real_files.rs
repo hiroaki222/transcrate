@@ -13,7 +13,7 @@ use common::{encode, tools_available, workspace};
 use transcrate_core::compat::AudioSpec;
 use transcrate_core::device::Codec;
 use transcrate_core::plan::{
-    self, Action, BitDepthPolicy, MetadataPolicy, SampleRatePolicy, Target,
+    self, Action, Artwork, BitDepthPolicy, MetadataPolicy, SampleRatePolicy, Target,
 };
 use transcrate_core::{convert, probe};
 
@@ -212,7 +212,16 @@ fn a_copy_reproduces_the_source_byte_for_byte() {
     );
     let source = probe::run(Path::new("ffprobe"), &source_path).expect("probe source");
 
-    let copy = plan::plan(&source, &Target::CDJ_SAFE);
+    // Nothing to rewrite in the tags either, which is what leaves a plain copy
+    // as the right answer.
+    let target = Target {
+        metadata: MetadataPolicy {
+            clear: &[],
+            artwork: Artwork::Keep,
+        },
+        ..Target::CDJ_SAFE
+    };
+    let copy = plan::plan(&source, &target);
     assert_eq!(copy.action, Action::Copy);
 
     let output_path = dir.join("copied.mp3");

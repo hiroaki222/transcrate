@@ -39,7 +39,7 @@ pub fn run(ffmpeg: &Path, plan: &Plan, input: &Path, output: &Path) -> Result<()
         Action::Copy => std::fs::copy(input, output)
             .map(|_| ())
             .map_err(|source| ConvertError::CopyFailed { source }),
-        Action::Encode { .. } => encode(ffmpeg, plan, input, output),
+        Action::Retag | Action::Encode { .. } => encode(ffmpeg, plan, input, output),
     }
 }
 

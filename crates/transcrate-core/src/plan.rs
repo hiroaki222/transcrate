@@ -62,6 +62,14 @@ impl MetadataPolicy {
         clear: &["lyrics-eng"],
         artwork: Artwork::Keep,
     };
+
+    /// Whether applying this would change a file at all.
+    ///
+    /// Keeping the artwork and clearing nothing leaves the bytes as they were,
+    /// which is what makes a plain copy correct.
+    fn rewrites_anything(&self) -> bool {
+        !self.clear.is_empty() || self.artwork == Artwork::Remove
+    }
 }
 
 /// What to convert into.
@@ -159,6 +167,10 @@ pub enum Action {
     /// the cheapest outcome and worth reaching for: a library that is already
     /// in the right format should not be re-encoded to prove it.
     Copy,
+    /// The audio is already what was asked for, but the tags are not. The
+    /// stream is copied across untouched and only the metadata is rewritten,
+    /// so a lossy source loses nothing to a change of text.
+    Retag,
     Encode {
         dither: bool,
     },
@@ -176,12 +188,14 @@ pub struct Plan {
 pub fn plan(source: &AudioSpec, target: &Target) -> Plan {
     let output = resolve(source, target);
 
-    let action = if output == *source {
-        Action::Copy
-    } else {
+    let action = if output != *source {
         Action::Encode {
             dither: shortens_word_length(source, &output),
         }
+    } else if target.metadata.rewrites_anything() {
+        Action::Retag
+    } else {
+        Action::Copy
     };
 
     Plan {
@@ -208,6 +222,19 @@ pub fn encode_args(plan: &Plan) -> Vec<String> {
     }
 
     args.push("-c:a".to_owned());
+
+    // A retag leaves the audio exactly as it arrived: re-encoding it to change
+    // a string would cost quality on a lossy source and time on any other.
+    // Bitrate, rate and dither all describe an encode that is not happening.
+    if plan.action == Action::Retag {
+        args.push("copy".to_owned());
+        args.extend(metadata_args(plan.metadata, output.codec));
+        args.push("-nostats".to_owned());
+        args.push("-progress".to_owned());
+        args.push("pipe:1".to_owned());
+        return args;
+    }
+
     args.push(encoder_name(output));
 
     if let Some(kbps) = output.bitrate_kbps {
@@ -474,20 +501,67 @@ mod tests {
         assert_eq!(output.bit_depth, Some(24));
     }
 
-    /// The fastest conversion is the one that does not happen. A library that
-    /// is already in the target format should cost a file copy, not an encode.
-    #[test]
-    fn a_file_already_in_the_target_format_is_copied() {
-        let source = AudioSpec {
+    fn already_cdj_safe() -> AudioSpec {
+        AudioSpec {
             codec: Codec::Mp3,
             sample_rate_hz: 44_100,
             bit_depth: None,
             bitrate_kbps: Some(320),
+        }
+    }
+
+    const UNTOUCHED: MetadataPolicy = MetadataPolicy {
+        clear: &[],
+        artwork: Artwork::Keep,
+    };
+
+    /// The fastest conversion is the one that does not happen. A library that
+    /// is already in the target format, with nothing to rewrite, should cost a
+    /// file copy and no more.
+    #[test]
+    fn a_file_that_needs_nothing_is_copied() {
+        let target = Target {
+            metadata: UNTOUCHED,
+            ..Target::CDJ_SAFE
         };
-        let plan = plan(&source, &Target::CDJ_SAFE);
+        let plan = plan(&already_cdj_safe(), &target);
 
         assert_eq!(plan.action, Action::Copy);
-        assert_eq!(plan.output, source);
+        assert_eq!(plan.output, already_cdj_safe());
+    }
+
+    /// Tags to clear on a file that is otherwise already right has to rewrite
+    /// the file — a copy carries the tag across untouched, which is the whole
+    /// problem. The audio is stream-copied, so nothing is re-encoded to change
+    /// a string, and a lossy source loses nothing.
+    #[test]
+    fn a_file_needing_only_tag_changes_is_stream_copied() {
+        let plan = plan(&already_cdj_safe(), &Target::CDJ_SAFE);
+        assert_eq!(plan.action, Action::Retag);
+
+        let args = encode_args(&plan);
+        assert!(
+            pairs_contain(&args, "-c:a", "copy"),
+            "audio should not be re-encoded to change a tag: {args:?}"
+        );
+        assert!(pairs_contain(&args, "-metadata", "comment="), "{args:?}");
+        // Re-encoding options make no sense against a stream copy.
+        assert!(!args.iter().any(|arg| arg == "-b:a"), "{args:?}");
+        assert!(!args.iter().any(|arg| arg == "-af"), "{args:?}");
+    }
+
+    /// Removing artwork is a rewrite too, even with no tag fields to clear.
+    #[test]
+    fn dropping_artwork_alone_is_enough_to_rewrite() {
+        let target = Target {
+            metadata: MetadataPolicy {
+                clear: &[],
+                artwork: Artwork::Remove,
+            },
+            ..Target::CDJ_SAFE
+        };
+
+        assert_eq!(plan(&already_cdj_safe(), &target).action, Action::Retag);
     }
 
     #[test]
@@ -744,7 +818,9 @@ mod tests {
             sample_rate: SampleRatePolicy::CapAt(48_000),
             bit_depth: BitDepthPolicy::Preserve,
             bitrate_kbps: None,
-            metadata: MetadataPolicy::DJ,
+            // Nothing to rewrite, so a file already under the ceiling stays a
+            // plain copy.
+            metadata: UNTOUCHED,
         };
         let plan = plan(&wav(44_100, 24), &target);
 

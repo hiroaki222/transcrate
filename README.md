@@ -114,6 +114,19 @@ key and BPM are what the browser is for, so they stay.
 `--keep-comment` leaves the comment alone, for anyone who keeps their own cue
 notes or a Camelot key there. The lyrics go either way.
 
+Naming the format a file is already in rewrites the tags without re-encoding
+anything — the audio stream is copied across untouched, so a lossy file loses
+nothing to a change of text:
+
+```sh
+transcrate convert ~/Music --to mp3                            # clear the comment
+transcrate convert ~/Music --to mp3 --no-artwork --keep-comment  # drop the sleeve
+```
+
+```
+[1/1] track.mp3 -> _transcrate/track.mp3  (tags rewritten, audio untouched)
+```
+
 Embedded artwork rides along, labelled the way rekordbox and the CDJ browser
 expect to find it. `--no-artwork` drops it instead.
 

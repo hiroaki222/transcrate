@@ -277,6 +277,7 @@ fn report_one(
         Ok(()) => {
             let how = match job.plan.action {
                 Action::Copy => "copied",
+                Action::Retag => "tags rewritten, audio untouched",
                 Action::Encode { dither: true } => "encoded, dithered",
                 Action::Encode { dither: false } => "encoded",
             };

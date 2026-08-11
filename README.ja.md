@@ -112,6 +112,18 @@ cargo run -p transcrate-cli -- convert ~/Music/track.flac --to aiff
 `--keep-comment` を付けるとコメントは削除されない. 自分でキューのメモや
 Camelot キーを書き込んでいる場合はこちらを使う. 歌詞はどちらの場合も削除する.
 
+元と同じ形式を指定すると, 再エンコードせずにタグだけを書き換える. 音声
+ストリームはそのままコピーされるため, ロッシー音源でも劣化しない:
+
+```sh
+transcrate convert ~/Music --to mp3                              # コメントを消す
+transcrate convert ~/Music --to mp3 --no-artwork --keep-comment  # ジャケットを消す
+```
+
+```
+[1/1] track.mp3 -> _transcrate/track.mp3  (tags rewritten, audio untouched)
+```
+
 埋め込みアートワークも引き継ぐ. rekordbox と CDJ のブラウザが認識できる形で
 ストリームにラベルを付ける. `--no-artwork` を付けると削除する.
 
