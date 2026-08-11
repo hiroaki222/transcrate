@@ -4,43 +4,16 @@
 //! that actually matters: that ffmpeg accepts them, and that the file coming
 //! out is the file the plan promised. An argument list can be perfectly
 //! self-consistent and still produce something no CDJ will read.
-//!
-//! Skipped when ffmpeg or ffprobe is not on PATH.
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+mod common;
 
+use std::path::Path;
+
+use common::{encode, tools_available, workspace};
 use transcrate_core::compat::AudioSpec;
 use transcrate_core::device::Codec;
 use transcrate_core::plan::{self, Action, BitDepthPolicy, SampleRatePolicy, Target};
 use transcrate_core::{convert, probe};
-
-fn tool_missing(tool: &str) -> bool {
-    Command::new(tool).arg("-version").output().is_err()
-}
-
-fn workspace() -> PathBuf {
-    let dir = std::env::temp_dir().join("transcrate-convert-real-files");
-    std::fs::create_dir_all(&dir).expect("create temp dir");
-    dir
-}
-
-fn encode_source(dir: &Path, name: &str, sample_rate_hz: u32, codec_args: &[&str]) -> PathBuf {
-    let path = dir.join(name);
-    let source = format!("anullsrc=r={sample_rate_hz}:cl=stereo");
-
-    let status = Command::new("ffmpeg")
-        .args([
-            "-v", "error", "-y", "-f", "lavfi", "-i", &source, "-t", "0.2",
-        ])
-        .args(codec_args)
-        .arg(&path)
-        .status()
-        .expect("run ffmpeg");
-    assert!(status.success(), "ffmpeg failed to write {name}");
-
-    path
-}
 
 /// Convert `input` by `plan` and read back what landed on disk.
 fn convert_and_probe(plan: &plan::Plan, input: &Path, output: &Path) -> AudioSpec {
@@ -50,17 +23,16 @@ fn convert_and_probe(plan: &plan::Plan, input: &Path, output: &Path) -> AudioSpe
 
 #[test]
 fn the_output_matches_what_the_plan_promised() {
-    if tool_missing("ffmpeg") || tool_missing("ffprobe") {
-        eprintln!("skipping: ffmpeg or ffprobe is not on PATH");
+    if !tools_available() {
         return;
     }
 
-    let dir = workspace();
+    let dir = workspace("convert-plan-promise");
     let ffprobe = Path::new("ffprobe");
 
     // Hi-res FLAC down to the default profile: a new codec, a new rate, and a
     // bit depth that stops existing.
-    let flac = encode_source(
+    let flac = encode(
         &dir,
         "hires.flac",
         96_000,
@@ -80,13 +52,12 @@ fn the_output_matches_what_the_plan_promised() {
 /// big-endian or the result is noise.
 #[test]
 fn a_dithered_reduction_into_aiff_lands_at_the_planned_depth() {
-    if tool_missing("ffmpeg") || tool_missing("ffprobe") {
-        eprintln!("skipping: ffmpeg or ffprobe is not on PATH");
+    if !tools_available() {
         return;
     }
 
-    let dir = workspace();
-    let float32 = encode_source(&dir, "float32.wav", 48_000, &["-c:a", "pcm_f32le"]);
+    let dir = workspace("convert-dither");
+    let float32 = encode(&dir, "float32.wav", 48_000, &["-c:a", "pcm_f32le"]);
     let source = probe::run(Path::new("ffprobe"), &float32).expect("probe source");
 
     let to_aiff = plan::plan(
@@ -110,13 +81,12 @@ fn a_dithered_reduction_into_aiff_lands_at_the_planned_depth() {
 /// would spend time to produce something slightly worse.
 #[test]
 fn a_copy_reproduces_the_source_byte_for_byte() {
-    if tool_missing("ffmpeg") || tool_missing("ffprobe") {
-        eprintln!("skipping: ffmpeg or ffprobe is not on PATH");
+    if !tools_available() {
         return;
     }
 
-    let dir = workspace();
-    let source_path = encode_source(
+    let dir = workspace("convert-copy");
+    let source_path = encode(
         &dir,
         "already.mp3",
         44_100,
