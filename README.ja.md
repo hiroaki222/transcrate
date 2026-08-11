@@ -125,6 +125,28 @@ cargo run -p transcrate-cli -- check ~/Music/track.flac
 cargo run -p transcrate-cli -- check ~/Music/*.flac --device cdj-3000,xdj-rr
 ```
 
+`--failing` を付けると, 既に再生できるファイルは表示されず, 対処が必要な
+ものだけが残る:
+
+```sh
+transcrate check ~/Music --failing -d xdj-rr
+```
+
+```
+./float32.wav
+  WAV 48 kHz 32-bit
+  XDJ-RR         32-bit is not supported for WAV
+
+./hires.flac
+  FLAC 96 kHz 24-bit
+  XDJ-RR         FLAC is not supported
+
+2 of 6 rejected
+```
+
+ここでの「失敗」は, 指定した機種の**いずれか 1 つでも**再生できないことを指す.
+10 機種のうち 9 機種で鳴っても, 残り 1 機種が現場にあればセットは止まる.
+
 1 つでも弾かれた場合は非ゼロで終了するので, スクリプトの判定に使える.
 
 ### PATH に入れる

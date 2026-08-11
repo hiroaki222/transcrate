@@ -128,6 +128,28 @@ Narrow it to the gear you are actually taking:
 cargo run -p transcrate-cli -- check ~/Music/*.flac --device cdj-3000,xdj-rr
 ```
 
+`--failing` leaves out everything that already plays, so a folder prints only
+what needs doing:
+
+```sh
+transcrate check ~/Music --failing -d xdj-rr
+```
+
+```
+./float32.wav
+  WAV 48 kHz 32-bit
+  XDJ-RR         32-bit is not supported for WAV
+
+./hires.flac
+  FLAC 96 kHz 24-bit
+  XDJ-RR         FLAC is not supported
+
+2 of 6 rejected
+```
+
+Failing means *any* of the named players rejects it, not all of them: a track
+that plays on nine out of ten is still the one that stops the set.
+
 It exits non-zero if anything is rejected, so it can gate a script.
 
 ### Installing it on your PATH

@@ -72,6 +72,10 @@ Examples:
         )]
         devices: Vec<String>,
 
+        /// Show only the files at least one player rejects.
+        #[arg(short, long)]
+        failing: bool,
+
         /// The ffprobe binary to use.
         #[arg(long, default_value = "ffprobe", value_name = "PATH", value_hint = ValueHint::FilePath)]
         ffprobe: PathBuf,
@@ -152,8 +156,9 @@ fn main() -> ExitCode {
         Command::Check {
             files,
             devices,
+            failing,
             ffprobe,
-        } => run_check(&files, &devices, &ffprobe),
+        } => run_check(&files, &devices, failing, &ffprobe),
         Command::Convert {
             files,
             profile,
@@ -483,7 +488,12 @@ fn write_completions(shell: Shell, out: &mut impl std::io::Write) {
 
 /// Exits non-zero when any file fails to read or any named player rejects one,
 /// so this can gate a script without parsing the output.
-fn run_check(files: &[PathBuf], device_ids: &[String], ffprobe: &Path) -> ExitCode {
+fn run_check(
+    files: &[PathBuf],
+    device_ids: &[String],
+    failing_only: bool,
+    ffprobe: &Path,
+) -> ExitCode {
     let players = match resolve_players(device_ids) {
         Ok(players) => players,
         Err(message) => {
@@ -499,15 +509,34 @@ fn run_check(files: &[PathBuf], device_ids: &[String], ffprobe: &Path) -> ExitCo
     }
 
     let mut all_clear = true;
+    let mut rejected_count = 0usize;
 
     for file in &inputs {
         match probe::run(ffprobe, file) {
-            Ok(spec) => all_clear &= report(file, &spec, &players),
+            Ok(spec) => {
+                let failing = rejected_anywhere(&spec, &players);
+                if failing {
+                    rejected_count += 1;
+                    all_clear = false;
+                }
+                // With --failing, a clean file is one you do not need to see;
+                // the point of the flag is to leave only what needs doing.
+                if failing || !failing_only {
+                    report(file, &spec, &players);
+                }
+            }
             Err(error) => {
                 eprintln!("{}: {error}", file.display());
+                rejected_count += 1;
                 all_clear = false;
             }
         }
+    }
+
+    // One file speaks for itself; a folder needs a count, or a clean run under
+    // --failing prints nothing at all and looks like it did not work.
+    if inputs.len() > 1 {
+        println!("{rejected_count} of {} rejected", inputs.len());
     }
 
     if all_clear {
@@ -517,8 +546,16 @@ fn run_check(files: &[PathBuf], device_ids: &[String], ffprobe: &Path) -> ExitCo
     }
 }
 
-/// Print one file's verdict, returning whether every player accepted it.
-fn report(file: &Path, spec: &AudioSpec, players: &[&'static DeviceProfile]) -> bool {
+/// Whether any of `players` refuses this file.
+///
+/// Any, not every: a track that plays on nine of ten is still the one that
+/// stops the set.
+fn rejected_anywhere(spec: &AudioSpec, players: &[&'static DeviceProfile]) -> bool {
+    players.iter().any(|player| !check(spec, player).is_empty())
+}
+
+/// Print one file's verdict.
+fn report(file: &Path, spec: &AudioSpec, players: &[&'static DeviceProfile]) {
     println!("{}", file.display());
     println!("  {}", describe_spec(spec));
 
@@ -542,8 +579,6 @@ fn report(file: &Path, spec: &AudioSpec, players: &[&'static DeviceProfile]) -> 
         println!("  {name:<14} {}", reasons.join("; "));
     }
     println!();
-
-    rejected.is_empty()
 }
 
 /// Resolve player ids, where naming none means all of them.
@@ -924,6 +959,36 @@ mod tests {
                 .expect("path");
             assert_eq!(path.extension().and_then(|e| e.to_str()), Some(expected));
         }
+    }
+
+    /// "Any player rejects it", not "every player rejects it". A track that
+    /// plays on nine of ten is still the one that stops the set, so it has to
+    /// come through the filter.
+    #[test]
+    fn a_file_is_failing_when_any_player_rejects_it() {
+        let everywhere = resolve_players(&[]).expect("all players");
+
+        // FLAC at 96 kHz: fine on a CDJ-3000, refused outright by an XDJ-RR.
+        let hi_res = AudioSpec {
+            codec: Codec::Flac,
+            sample_rate_hz: 96_000,
+            bit_depth: Some(24),
+            bitrate_kbps: None,
+        };
+        assert!(rejected_anywhere(&hi_res, &everywhere));
+
+        // The default profile's output, which every player takes.
+        let safe = AudioSpec {
+            codec: Codec::Mp3,
+            sample_rate_hz: 44_100,
+            bit_depth: None,
+            bitrate_kbps: Some(320),
+        };
+        assert!(!rejected_anywhere(&safe, &everywhere));
+
+        // Narrowing to the players that do take it clears the same file.
+        let modern = resolve_players(&["cdj-3000".to_owned()]).expect("cdj-3000");
+        assert!(!rejected_anywhere(&hi_res, &modern));
     }
 
     /// Checking against nothing in particular means checking against everything;
