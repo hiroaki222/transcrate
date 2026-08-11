@@ -3,48 +3,23 @@
 //! The unit tests parse captured ffprobe output, which pins down the parsing
 //! but not the assumption underneath it: that ffprobe still reports these
 //! fields this way. These tests encode files and read them back, so a change in
-//! ffmpeg's output shows up here rather than in someone's USB stick.
-//!
-//! Skipped when ffmpeg or ffprobe is not on PATH, so a checkout without them
-//! still passes the rest of the suite.
+//! ffmpeg's output shows up here rather than on someone's USB stick.
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+mod common;
 
+use std::path::Path;
+
+use common::{encode, tools_available, workspace};
 use transcrate_core::device::Codec;
 use transcrate_core::probe;
 
-fn tool_missing(tool: &str) -> bool {
-    Command::new(tool).arg("-version").output().is_err()
-}
-
-/// Encode 0.1 s of silence with the given codec settings.
-fn encode(dir: &Path, name: &str, sample_rate_hz: u32, codec_args: &[&str]) -> PathBuf {
-    let path = dir.join(name);
-    let source = format!("anullsrc=r={sample_rate_hz}:cl=stereo");
-
-    let status = Command::new("ffmpeg")
-        .args([
-            "-v", "error", "-y", "-f", "lavfi", "-i", &source, "-t", "0.1",
-        ])
-        .args(codec_args)
-        .arg(&path)
-        .status()
-        .expect("run ffmpeg");
-    assert!(status.success(), "ffmpeg failed to write {name}");
-
-    path
-}
-
 #[test]
 fn reads_back_what_ffmpeg_wrote() {
-    if tool_missing("ffmpeg") || tool_missing("ffprobe") {
-        eprintln!("skipping: ffmpeg or ffprobe is not on PATH");
+    if !tools_available() {
         return;
     }
 
-    let dir = std::env::temp_dir().join("transcrate-probe-real-files");
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = workspace("probe-round-trip");
     let ffprobe = Path::new("ffprobe");
 
     // 24-bit FLAC, which ffprobe describes with a 32-bit sample format. The
@@ -108,13 +83,11 @@ fn reads_back_what_ffmpeg_wrote() {
 
 #[test]
 fn a_file_that_is_not_audio_fails_rather_than_guessing() {
-    if tool_missing("ffprobe") {
-        eprintln!("skipping: ffprobe is not on PATH");
+    if !tools_available() {
         return;
     }
 
-    let dir = std::env::temp_dir().join("transcrate-probe-real-files");
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = workspace("probe-not-audio");
     let path = dir.join("not-audio.txt");
     std::fs::write(&path, b"this is not a media file").expect("write file");
 

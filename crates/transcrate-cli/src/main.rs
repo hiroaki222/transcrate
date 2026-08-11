@@ -4,8 +4,10 @@ use std::process::ExitCode;
 use clap::builder::PossibleValuesParser;
 use clap::{CommandFactory, Parser, Subcommand, ValueHint};
 use clap_complete::Shell;
+use transcrate_core::plan::{self, Action, Target};
 use transcrate_core::{
-    AudioSpec, Codec, DEVICES, DeviceProfile, FileSystem, Issue, Support, by_id, check, probe,
+    AudioSpec, Codec, DEVICES, DeviceProfile, FileSystem, Issue, Support, by_id, check, convert,
+    probe,
 };
 
 /// Fast, DJ-oriented audio transcoder built on ffmpeg.
@@ -41,6 +43,41 @@ enum Command {
         ffprobe: PathBuf,
     },
 
+    /// Convert files into a profile's format.
+    Convert {
+        #[arg(required = true, value_name = "FILE", value_hint = ValueHint::FilePath)]
+        files: Vec<PathBuf>,
+
+        /// Profile to convert into. Defaults to cdj-safe.
+        #[arg(
+            short,
+            long,
+            conflicts_with = "to",
+            value_parser = PossibleValuesParser::new(Target::NAMES),
+        )]
+        profile: Option<String>,
+
+        /// Convert into this format, keeping the source's rate and depth.
+        #[arg(
+            long,
+            value_name = "FORMAT",
+            value_parser = PossibleValuesParser::new(Target::FORMATS),
+        )]
+        to: Option<String>,
+
+        /// Where to write. Defaults to a `_transcrate` folder beside each input.
+        #[arg(short, long, value_name = "DIR", value_hint = ValueHint::DirPath)]
+        output: Option<PathBuf>,
+
+        /// The ffmpeg binary to use.
+        #[arg(long, default_value = "ffmpeg", value_name = "PATH", value_hint = ValueHint::FilePath)]
+        ffmpeg: PathBuf,
+
+        /// The ffprobe binary to use.
+        #[arg(long, default_value = "ffprobe", value_name = "PATH", value_hint = ValueHint::FilePath)]
+        ffprobe: PathBuf,
+    },
+
     /// Print a shell completion script.
     ///
     /// For zsh, write it somewhere on your fpath:
@@ -63,10 +100,157 @@ fn main() -> ExitCode {
             devices,
             ffprobe,
         } => run_check(&files, &devices, &ffprobe),
+        Command::Convert {
+            files,
+            profile,
+            to,
+            output,
+            ffmpeg,
+            ffprobe,
+        } => run_convert(
+            &files,
+            profile.as_deref(),
+            to.as_deref(),
+            output.as_deref(),
+            &ffmpeg,
+            &ffprobe,
+        ),
         Command::Completions { shell } => {
             write_completions(shell, &mut std::io::stdout());
             ExitCode::SUCCESS
         }
+    }
+}
+
+/// Exits non-zero if any file failed, so a partial run is visible to a script
+/// without reading the output.
+fn run_convert(
+    files: &[PathBuf],
+    profile: Option<&str>,
+    to: Option<&str>,
+    into: Option<&Path>,
+    ffmpeg: &Path,
+    ffprobe: &Path,
+) -> ExitCode {
+    let target = match resolve_target(profile, to) {
+        Ok(target) => target,
+        Err(message) => {
+            eprintln!("{message}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let mut all_done = true;
+
+    for input in files {
+        match convert_one(&target, input, into, ffmpeg, ffprobe) {
+            Ok(report) => println!("{report}"),
+            Err(message) => {
+                eprintln!("{message}");
+                all_done = false;
+            }
+        }
+    }
+
+    if all_done {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+fn convert_one(
+    target: &Target,
+    input: &Path,
+    into: Option<&Path>,
+    ffmpeg: &Path,
+    ffprobe: &Path,
+) -> Result<String, String> {
+    let failed = |error: &dyn std::fmt::Display| format!("{}: {error}", input.display());
+
+    let source = probe::run(ffprobe, input).map_err(|error| failed(&error))?;
+    let plan = plan::plan(&source, target);
+    let destination = output_path(input, into, plan.output.codec)?;
+
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("{}: {error}", parent.display()))?;
+    }
+
+    convert::run(ffmpeg, &plan, input, &destination).map_err(|error| failed(&error))?;
+
+    let how = match plan.action {
+        Action::Copy => "copied unchanged",
+        Action::Encode { dither: true } => "encoded, dithered",
+        Action::Encode { dither: false } => "encoded",
+    };
+
+    Ok(format!(
+        "{}\n  {} -> {}  ({how})\n  {}",
+        input.display(),
+        describe_spec(&source),
+        describe_spec(&plan.output),
+        destination.display()
+    ))
+}
+
+/// Work out what to convert into.
+///
+/// clap rules out naming both, so this only has to decide between one, the
+/// other, and neither.
+fn resolve_target(profile: Option<&str>, to: Option<&str>) -> Result<Target, String> {
+    match (profile, to) {
+        (Some(name), _) => Target::by_name(name).ok_or_else(|| {
+            format!(
+                "unknown profile: {name}. Try one of: {}",
+                Target::NAMES.join(", ")
+            )
+        }),
+        (None, Some(format)) => Target::from_format(format).ok_or_else(|| {
+            format!(
+                "unknown format: {format}. Try one of: {}",
+                Target::FORMATS.join(", ")
+            )
+        }),
+        (None, None) => Ok(Target::CDJ_SAFE),
+    }
+}
+
+/// Where a converted file lands.
+///
+/// Defaults to a `_transcrate` folder beside the input, so results sit next to
+/// the tracks they came from and never inside the source library itself.
+fn output_path(input: &Path, into: Option<&Path>, codec: Codec) -> Result<PathBuf, String> {
+    let stem = input
+        .file_stem()
+        .ok_or_else(|| format!("{} has no file name", input.display()))?;
+
+    let directory = match into {
+        Some(dir) => dir.to_path_buf(),
+        None => input.parent().unwrap_or(Path::new(".")).join("_transcrate"),
+    };
+
+    let mut destination = directory.join(stem);
+    destination.set_extension(extension_for(codec));
+
+    if destination == input {
+        return Err(format!(
+            "refusing to overwrite the source: {}",
+            input.display()
+        ));
+    }
+
+    Ok(destination)
+}
+
+const fn extension_for(codec: Codec) -> &'static str {
+    match codec {
+        Codec::Mp3 => "mp3",
+        // The same ambiguity the reader has to cope with: both live in .m4a.
+        Codec::AacLc | Codec::Alac => "m4a",
+        Codec::Flac => "flac",
+        Codec::PcmWav => "wav",
+        Codec::PcmAiff => "aiff",
     }
 }
 
@@ -350,6 +534,95 @@ mod tests {
         assert!(script.contains("transcrate"));
         assert!(script.contains("check"));
         assert!(script.contains("devices"));
+    }
+
+    /// A profile carries limits with it and a format does not, so asking for
+    /// both is ambiguous rather than additive.
+    #[test]
+    fn a_profile_and_a_format_cannot_both_be_given() {
+        let both = Cli::try_parse_from([
+            "transcrate",
+            "convert",
+            "track.wav",
+            "-p",
+            "cdj-safe",
+            "--to",
+            "aiff",
+        ]);
+        assert!(both.is_err(), "clap accepted both at once");
+
+        let format_only =
+            Cli::try_parse_from(["transcrate", "convert", "track.wav", "--to", "aiff"]);
+        assert!(format_only.is_ok(), "{:?}", format_only.err());
+    }
+
+    #[test]
+    fn naming_neither_falls_back_to_the_default_profile() {
+        assert_eq!(
+            resolve_target(None, None).expect("default"),
+            Target::CDJ_SAFE
+        );
+    }
+
+    #[test]
+    fn a_format_resolves_to_a_target_that_changes_nothing_else() {
+        let target = resolve_target(None, Some("aiff")).expect("aiff");
+        assert_eq!(target, Target::from_format("aiff").expect("aiff"));
+    }
+
+    /// Conversions land beside the source rather than in the working directory,
+    /// so converting a folder leaves the results next to the tracks they came
+    /// from instead of wherever the shell happened to be.
+    #[test]
+    fn output_lands_in_a_subfolder_beside_the_input() {
+        let path = output_path(Path::new("/music/track.flac"), None, Codec::Mp3).expect("path");
+        assert_eq!(path, Path::new("/music/_transcrate/track.mp3"));
+    }
+
+    #[test]
+    fn a_named_directory_takes_the_files_instead() {
+        let path = output_path(
+            Path::new("/music/track.flac"),
+            Some(Path::new("/out")),
+            Codec::Mp3,
+        )
+        .expect("path");
+        assert_eq!(path, Path::new("/out/track.mp3"));
+    }
+
+    /// Someone's library is not ours to overwrite. Converting an MP3 to MP3
+    /// into its own directory would land straight on top of the original, and
+    /// no amount of speed makes that worth it.
+    #[test]
+    fn writing_over_the_source_is_refused() {
+        let error = output_path(
+            Path::new("/music/track.mp3"),
+            Some(Path::new("/music")),
+            Codec::Mp3,
+        )
+        .expect_err("should refuse");
+
+        assert!(error.contains("track.mp3"), "got: {error}");
+    }
+
+    /// ALAC and AAC share .m4a, which is the same ambiguity the reader has to
+    /// cope with — writing it is where the ambiguity starts.
+    #[test]
+    fn the_extension_follows_the_codec() {
+        let cases = [
+            (Codec::Mp3, "mp3"),
+            (Codec::AacLc, "m4a"),
+            (Codec::Alac, "m4a"),
+            (Codec::Flac, "flac"),
+            (Codec::PcmWav, "wav"),
+            (Codec::PcmAiff, "aiff"),
+        ];
+
+        for (codec, expected) in cases {
+            let path = output_path(Path::new("/music/track.wv"), Some(Path::new("/out")), codec)
+                .expect("path");
+            assert_eq!(path.extension().and_then(|e| e.to_str()), Some(expected));
+        }
     }
 
     /// Checking against nothing in particular means checking against everything;

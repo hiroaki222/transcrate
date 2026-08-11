@@ -5,7 +5,9 @@
 //! keeps the two front-ends from drifting apart.
 
 pub mod compat;
+pub mod convert;
 pub mod device;
+pub mod plan;
 pub mod probe;
 
 pub use compat::{AudioSpec, Issue, check};

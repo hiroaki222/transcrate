@@ -9,7 +9,8 @@ Transcrate converts audio with ffmpeg and checks the result against what CDJs
 and XDJs actually accept: codecs, sample rates, bit depths and filesystems,
 taken from the manufacturers' manuals.
 
-**Status: early.** `devices` and `check` work. Conversion is not built yet.
+**Status: early, but it converts.** Parallel jobs, progress reporting and
+metadata control are next.
 
 ## Build
 
@@ -34,6 +35,47 @@ XDJ-XZ         2019     48k   48k    48k    48k    48k      -  sources disagree
 XDJ-RR         2018     48k   48k    48k    48k      -      -  no
 CDJ-2000NXS2   2016     48k   48k    96k    96k    96k    96k  no
 ```
+
+Convert a folder. Needs ffmpeg on your PATH:
+
+```sh
+cargo run -p transcrate-cli -- convert ~/Music/*.flac
+```
+
+```
+~/Music/track.flac
+  FLAC 96 kHz 24-bit -> MP3 44.1 kHz 320 kbps  (encoded)
+  ~/Music/_transcrate/track.mp3
+~/Music/already-fine.mp3
+  MP3 44.1 kHz 320 kbps -> MP3 44.1 kHz 320 kbps  (copied unchanged)
+  ~/Music/_transcrate/already-fine.mp3
+```
+
+Results land in a `_transcrate` folder beside each input, and the source is
+never written to. Anything already in the target format is copied rather than
+re-encoded, which is both faster and kinder to a lossy original.
+
+Three profiles, chosen with `-p`:
+
+| Profile | Output | For |
+|---|---|---|
+| `cdj-safe` (default) | MP3 320 kbps, 44.1 kHz | Plays on every player in the table |
+| `lossless` | AIFF, up to 48 kHz / 24-bit | Lossless and still playable everywhere |
+| `archive` | FLAC, source rate and depth | The copy you keep, not the one you play |
+
+Or name a format directly. That changes the container and nothing else, keeping
+the source's rate and depth:
+
+```sh
+cargo run -p transcrate-cli -- convert ~/Music/track.flac --to aiff
+```
+
+`mp3`, `aac`, `alac`, `flac`, `wav`, `aiff`. A profile carries limits with it
+and a format does not, so a 96 kHz source stays at 96 kHz — run `check` on the
+result if it is going to a gig.
+
+Reducing bit depth adds dither automatically. Resampling does not, because
+that is not what dither is for.
 
 Ask what a file will play on. This one needs `ffprobe` on your PATH, which comes
 with ffmpeg:
