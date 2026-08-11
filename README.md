@@ -114,17 +114,28 @@ key and BPM are what the browser is for, so they stay.
 `--keep-comment` leaves the comment alone, for anyone who keeps their own cue
 notes or a Camelot key there. The lyrics go either way.
 
-Naming the format a file is already in rewrites the tags without re-encoding
-anything — the audio stream is copied across untouched, so a lossy file loses
-nothing to a change of text:
+### Tidying tags without converting
 
 ```sh
-transcrate convert ~/Music --to mp3                            # clear the comment
-transcrate convert ~/Music --to mp3 --no-artwork --keep-comment  # drop the sleeve
+transcrate retag ~/Music
 ```
 
 ```
-[1/1] track.mp3 -> _transcrate/track.mp3  (tags rewritten, audio untouched)
+[1/3] track.aiff -> _transcrate/track.aiff  (tags rewritten, audio untouched)
+[2/3] already.mp3 -> _transcrate/already.mp3  (tags rewritten, audio untouched)
+[3/3] track.flac -> _transcrate/track.flac  (tags rewritten, audio untouched)
+```
+
+Every file comes out in the format it went in as, so a folder holding MP3 next
+to AIFF takes one command rather than one per extension. The audio stream is
+copied across untouched: a lossy file loses nothing to a change of text, and
+nothing is spent re-encoding audio that was already correct.
+
+`--no-artwork` and `--keep-comment` mean the same here as on `convert`:
+
+```sh
+transcrate retag ~/Music --no-artwork                 # drop every sleeve
+transcrate retag ~/Music --no-artwork --keep-comment  # sleeves out, notes stay
 ```
 
 Embedded artwork rides along, labelled the way rekordbox and the CDJ browser

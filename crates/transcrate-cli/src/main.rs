@@ -99,6 +99,19 @@ Examples:
   transcrate convert ~/Music/* -j 4         Leave some cores alone")]
     Convert(ConvertArgs),
 
+    /// Tidy up tags without touching the audio.
+    ///
+    /// Every file comes out in the format it went in as, so a folder holding
+    /// MP3 next to AIFF takes one command. The audio stream is copied across
+    /// untouched: a lossy file loses nothing to a change of text.
+    #[command(after_help = "\
+Examples:
+  transcrate retag ~/Music                      Clear the comment and the lyrics
+  transcrate retag ~/Music --no-artwork         Drop the sleeve as well
+  transcrate retag ~/Music --keep-comment --no-artwork
+                                                Drop the sleeve, keep your notes")]
+    Retag(RetagArgs),
+
     /// Print a shell completion script.
     ///
     /// For zsh, write it somewhere on your fpath:
@@ -162,6 +175,37 @@ struct ConvertArgs {
     ffprobe: PathBuf,
 }
 
+#[derive(Debug, clap::Args)]
+struct RetagArgs {
+    /// Files to retag.
+    #[arg(required = true, value_name = "FILE", value_hint = ValueHint::FilePath)]
+    files: Vec<PathBuf>,
+
+    /// Where to write. Defaults to a `_transcrate` folder beside each input.
+    #[arg(short, long, value_name = "DIR", value_hint = ValueHint::DirPath)]
+    output: Option<PathBuf>,
+
+    /// Drop embedded artwork instead of carrying it across.
+    #[arg(long)]
+    no_artwork: bool,
+
+    /// Keep the comment field, which is otherwise emptied.
+    #[arg(long)]
+    keep_comment: bool,
+
+    /// How many files to work on at once. Defaults to one per core.
+    #[arg(short = 'j', long, value_name = "N")]
+    jobs: Option<usize>,
+
+    /// The ffmpeg binary to use.
+    #[arg(long, default_value = "ffmpeg", value_name = "PATH", value_hint = ValueHint::FilePath)]
+    ffmpeg: PathBuf,
+
+    /// The ffprobe binary to use.
+    #[arg(long, default_value = "ffprobe", value_name = "PATH", value_hint = ValueHint::FilePath)]
+    ffprobe: PathBuf,
+}
+
 fn main() -> ExitCode {
     match Cli::parse().command {
         Command::Devices => {
@@ -175,6 +219,7 @@ fn main() -> ExitCode {
             ffprobe,
         } => run_check(&files, &devices, failing, &ffprobe),
         Command::Convert(args) => run_convert(&args),
+        Command::Retag(args) => run_retag(&args),
         Command::Completions { shell } => {
             write_completions(shell, &mut std::io::stdout());
             ExitCode::SUCCESS
@@ -211,12 +256,53 @@ fn run_convert(args: &ConvertArgs) -> ExitCode {
         ..target
     };
 
-    let (files, into, ffmpeg, ffprobe) = (
+    run_jobs(
         &args.files,
         args.output.as_deref(),
-        args.ffmpeg.as_path(),
-        args.ffprobe.as_path(),
-    );
+        args.jobs,
+        (args.ffmpeg.as_path(), args.ffprobe.as_path()),
+        &|_| target,
+    )
+}
+
+/// Rewrite tags, leaving every file in the format it arrived in.
+fn run_retag(args: &RetagArgs) -> ExitCode {
+    let metadata = MetadataPolicy {
+        artwork: if args.no_artwork {
+            Artwork::Remove
+        } else {
+            Artwork::Keep
+        },
+        ..if args.keep_comment {
+            MetadataPolicy::KEEPING_COMMENTS
+        } else {
+            MetadataPolicy::DJ
+        }
+    };
+
+    run_jobs(
+        &args.files,
+        args.output.as_deref(),
+        args.jobs,
+        (args.ffmpeg.as_path(), args.ffprobe.as_path()),
+        // Built per file rather than chosen once: that is what lets a folder of
+        // mixed formats go through in one pass.
+        &|source| Target::keeping(source, metadata),
+    )
+}
+
+/// Plan every input, run the lot, and report as each lands.
+///
+/// `target_for` is handed each file's own format, so a caller can either fix
+/// the target in advance or derive it from what is there.
+fn run_jobs(
+    files: &[PathBuf],
+    into: Option<&Path>,
+    concurrency: Option<usize>,
+    tools: (&Path, &Path),
+    target_for: &dyn Fn(&AudioSpec) -> Target,
+) -> ExitCode {
+    let (ffmpeg, ffprobe) = tools;
 
     // Plan everything before encoding anything, so a file that cannot be read
     // is named straight away rather than after minutes of work on the rest.
@@ -230,7 +316,7 @@ fn run_convert(args: &ConvertArgs) -> ExitCode {
     let mut all_done = true;
 
     for input in &inputs {
-        match prepare(&target, input, into, ffprobe) {
+        match prepare(input, into, ffprobe, target_for) {
             Ok(job) => planned.push(job),
             Err(message) => {
                 eprintln!("{message}");
@@ -245,7 +331,7 @@ fn run_convert(args: &ConvertArgs) -> ExitCode {
     let results = convert::run_all(
         ffmpeg,
         &planned,
-        args.jobs.unwrap_or_else(convert::default_concurrency),
+        concurrency.unwrap_or_else(convert::default_concurrency),
         &|index, result| {
             let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
             report_one(finished, total, &planned[index], result);
@@ -308,14 +394,14 @@ fn enclosing_path(path: &Path) -> String {
 }
 
 fn prepare(
-    target: &Target,
     input: &Path,
     into: Option<&Path>,
     ffprobe: &Path,
+    target_for: &dyn Fn(&AudioSpec) -> Target,
 ) -> Result<convert::Job, String> {
     let source =
         probe::run(ffprobe, input).map_err(|error| format!("{}: {error}", input.display()))?;
-    let plan = plan::plan(&source, target);
+    let plan = plan::plan(&source, &target_for(&source));
     let output = output_path(input, into, plan.output.codec)?;
 
     if let Some(parent) = output.parent() {
@@ -827,12 +913,20 @@ mod tests {
         write_completions(clap_complete::Shell::Zsh, &mut script);
         let script = String::from_utf8(script).expect("utf8");
 
-        // check and convert each take files positionally.
+        // Every subcommand taking files positionally gets the narrowed offer.
+        // Counted rather than named, so adding a subcommand that misses out
+        // fails here instead of shipping a wider completion than intended.
+        let positional = script
+            .lines()
+            .filter(|line| line.trim_start().starts_with("'*::files"))
+            .count();
         let narrowed = script
             .lines()
             .filter(|line| line.contains("_files -g"))
             .count();
-        assert_eq!(narrowed, 2, "expected both file arguments to be narrowed");
+
+        assert!(positional >= 2, "expected check and convert at least");
+        assert_eq!(narrowed, positional, "a file argument was left unnarrowed");
         assert!(
             script.contains(&audio_glob()),
             "audio glob missing from the script"

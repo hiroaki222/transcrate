@@ -132,6 +132,22 @@ impl Target {
     /// Format names accepted where a container is named directly.
     pub const FORMATS: [&'static str; 6] = ["mp3", "aac", "alac", "flac", "wav", "aiff"];
 
+    /// A target that leaves the audio exactly as it arrived and only rewrites
+    /// the tags.
+    ///
+    /// Built from the file rather than chosen in advance, so a folder holding
+    /// MP3 next to AIFF is one command rather than one per extension. Every
+    /// file comes out in the format it went in as.
+    pub fn keeping(source: &AudioSpec, metadata: MetadataPolicy) -> Self {
+        Self {
+            codec: source.codec,
+            sample_rate: SampleRatePolicy::Preserve,
+            bit_depth: BitDepthPolicy::Preserve,
+            bitrate_kbps: source.bitrate_kbps,
+            metadata,
+        }
+    }
+
     /// A target that changes the format and nothing else.
     ///
     /// Where a profile carries limits with it, this keeps the source's rate and
@@ -528,6 +544,40 @@ mod tests {
 
         assert_eq!(plan.action, Action::Copy);
         assert_eq!(plan.output, already_cdj_safe());
+    }
+
+    /// Tidying the tags across a folder means leaving every file in whatever
+    /// format it already is, so one command covers a folder of mp3 next to
+    /// aiff rather than one command per extension.
+    #[test]
+    fn keeping_the_format_plans_a_retag_whatever_the_codec() {
+        let sources = [
+            already_cdj_safe(),
+            flac_source(),
+            AudioSpec {
+                codec: Codec::PcmAiff,
+                sample_rate_hz: 48_000,
+                bit_depth: Some(24),
+                bitrate_kbps: None,
+            },
+        ];
+
+        for source in sources {
+            let target = Target::keeping(&source, MetadataPolicy::DJ);
+            let plan = plan(&source, &target);
+
+            assert_eq!(plan.output, source, "the audio should come out unchanged");
+            assert_eq!(plan.action, Action::Retag, "{:?}", source.codec);
+        }
+    }
+
+    /// With nothing to rewrite there is nothing to do, whatever the format.
+    #[test]
+    fn keeping_the_format_with_nothing_to_clear_is_a_copy() {
+        let source = flac_source();
+        let plan = plan(&source, &Target::keeping(&source, UNTOUCHED));
+
+        assert_eq!(plan.action, Action::Copy);
     }
 
     /// Tags to clear on a file that is otherwise already right has to rewrite
