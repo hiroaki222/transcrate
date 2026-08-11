@@ -21,7 +21,21 @@ jobs:
         with:
           args: --latest --strip all
 
-      - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "$NOTES"
+      # The first-run notice goes last because GitHub renders the assets below
+      # the body: the end of the text is the spot nearest the download links,
+      # where someone about to download will actually read it. It lives here
+      # rather than in CHANGELOG.md, which would repeat it once per version.
+      - name: Assemble the release body
+        env:
+          CHANGES: ${{ steps.notes.outputs.content }}
+        run: |
+          printf '%s\n\n' "$CHANGES" > release-body.md
+          cat .github/release-notice.md >> release-body.md
+
+      - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-          NOTES: ${{ steps.notes.outputs.content }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-body.md
