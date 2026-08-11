@@ -78,6 +78,9 @@ autoload -Uz compinit && compinit
 `bash`, `fish`, `powershell` and `elvish` work too. Player ids complete as well,
 so `--device <TAB>` lists all ten.
 
+Under zsh, file arguments offer audio files and directories only, so the folder
+of artwork and PDFs sitting next to your tracks stays out of the way.
+
 Tests and lints, the same three CI runs:
 
 ```sh

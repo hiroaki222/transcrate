@@ -70,8 +70,27 @@ fn main() -> ExitCode {
     }
 }
 
+/// The containers this program reads. `(#i)` makes the match case-insensitive,
+/// so a `.WAV` ripped years ago still shows up.
+const AUDIO_GLOB: &str = "(#i)*.(wav|flac|aif|aiff|m4a|mp3|aac|mp4)";
+
 fn write_completions(shell: Shell, out: &mut impl std::io::Write) {
-    clap_complete::generate(shell, &mut Cli::command(), "transcrate", out);
+    let mut script = Vec::new();
+    clap_complete::generate(shell, &mut Cli::command(), "transcrate", &mut script);
+
+    // zsh's `_files -g` narrows the offer to audio while still listing
+    // directories, which is what makes it navigable. clap_complete has no way
+    // to express that, so the generated line is rewritten here. Only the
+    // positional argument is touched: --ffprobe names a binary.
+    if shell == Shell::Zsh {
+        let narrowed = String::from_utf8_lossy(&script).replace(
+            "'*::files:_files'",
+            &format!("'*::files:_files -g \"{AUDIO_GLOB}\"'"),
+        );
+        script = narrowed.into_bytes();
+    }
+
+    out.write_all(&script).expect("write completion script");
 }
 
 /// Exits non-zero when any file fails to read or any named player rejects one,
@@ -296,6 +315,30 @@ mod tests {
 
         assert_eq!(offered.len(), DEVICES.len());
         assert!(offered.contains(&"xdj-rr".to_owned()), "got: {offered:?}");
+    }
+
+    /// Completing every file on disk buries the handful that can be converted.
+    /// Directories still complete, or there would be no way to walk into one.
+    #[test]
+    fn file_completion_offers_audio_and_directories_only() {
+        let mut script = Vec::new();
+        write_completions(clap_complete::Shell::Zsh, &mut script);
+        let script = String::from_utf8(script).expect("utf8");
+
+        assert!(
+            script.contains(&format!("'*::files:_files -g \"{AUDIO_GLOB}\"'")),
+            "positional file argument is not narrowed"
+        );
+        assert!(
+            script.contains("flac"),
+            "audio glob missing from the script"
+        );
+
+        // --ffprobe points at a binary, so narrowing it would hide the target.
+        assert!(
+            script.contains("'--ffprobe=[The ffprobe binary to use]:PATH:_files'"),
+            "--ffprobe completion was narrowed too"
+        );
     }
 
     #[test]

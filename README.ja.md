@@ -77,6 +77,9 @@ autoload -Uz compinit && compinit
 `bash`, `fish`, `powershell`, `elvish` にも対応. 機種 ID も補完されるので,
 `--device <TAB>` で 10 機種が一覧される.
 
+zsh ではファイル引数の補完が音声ファイルとディレクトリだけになる. 曲と同じ
+フォルダに置いてあるジャケット画像や PDF は候補に出ない.
+
 テストと lint. CI で走るものと同じ:
 
 ```sh
