@@ -2,41 +2,22 @@
 
 [日本語](README.ja.md)
 
-Audio transcoder for DJs, built on ffmpeg, that knows what your gear can
-actually play.
+Convert tracks for your USB stick, and know they will play before you get to the
+club.
 
-## Why
+Transcrate converts audio with ffmpeg and checks the result against what CDJs
+and XDJs actually accept: codecs, sample rates, bit depths and filesystems,
+taken from the manufacturers' manuals.
 
-Converting tracks for a USB stick looks solved until the gear disagrees with
-itself:
+**Status: early.** `transcrate devices` works. Conversion is not built yet.
 
-- A CDJ-2000NXS2 from 2016 plays 96 kHz FLAC. An XDJ-AN from 2026 stops at
-  48 kHz. Newer is not more capable.
-- That same CDJ-2000NXS2 cannot read an exFAT stick, which every player from
-  2020 onward can. The XDJ-RX3 reads exFAT but rejects 96 kHz. The two limits
-  cross, so the players cannot be ranked on one scale.
-- `.m4a` holds either AAC or ALAC. Several players accept only AAC and answer
-  the other with error `E-8305`, and the file extension warns you of nothing.
+## Build
 
-Transcrate keeps the published limits of each player in one table, checks your
-output against the machines you are actually going to plug into, and tells you
-before you are standing in the booth.
-
-## What works today
-
-The compatibility table and the `devices` command. Conversion is not built yet.
-
-## Requirements
-
-- Rust 1.88 or newer
-
-ffmpeg is not required yet. Once conversion lands it will be invoked as a
-separate process, using a system installation when one is present and a bundled
-LGPL build otherwise.
-
-## Build and run
+Needs Rust 1.88 or newer.
 
 ```sh
+git clone https://github.com/hiroaki222/transcrate
+cd transcrate
 cargo run -p transcrate-cli -- devices
 ```
 
@@ -62,24 +43,41 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 ```
 
-## Compatibility data
+## Why
 
-Every figure in the table comes from the manufacturer's own operating
-instructions, with the document number recorded in
-[docs/device-compatibility.md](docs/device-compatibility.md). Where the official
-sources contradict each other — the XDJ-XZ and exFAT — the table records the
-disagreement rather than picking a side.
+DJ gear disagrees with itself, and not in ways you can guess:
 
-## Planned
+- **A CDJ-2000NXS2 from 2016 plays 96 kHz FLAC. An XDJ-AN from 2026 stops at
+  48 kHz.** Newer is not better.
+- **That same NXS2 cannot read an exFAT stick.** Everything from 2020 on can —
+  except the XDJ-RX3, which reads exFAT and refuses 96 kHz. The limits cross,
+  so you cannot rank the players on one scale.
+- **`.m4a` holds either AAC or ALAC.** Some players take only AAC and throw
+  `E-8305` at the other. The extension gives you no warning.
 
-- Convert between WAV, FLAC, AIFF, M4A and MP3 with DJ-appropriate defaults
-- Warnings per player, from the table above
-- Read-only USB diagnostics, which never write to or format a drive
-- Per-field metadata control: keep, clear or overwrite
-- Profiles shared between the command line and the GUI
-- A Tauri GUI for macOS and Windows, over the same core
+Get one of these wrong and you find out in the booth.
+
+## Where the numbers come from
+
+Every figure is from a manufacturer's manual, with the document number recorded
+in [docs/device-compatibility.md](docs/device-compatibility.md).
+
+Where the official sources contradict each other — the XDJ-XZ and exFAT — the
+table says so rather than picking a side.
+
+## Roadmap
+
+- Convert between WAV, FLAC, AIFF, M4A and MP3
+- Warn per player, from the table above
+- Check a USB stick. Read-only: it never writes to your drive
+- Keep, clear or overwrite metadata field by field
+- Profiles shared by the CLI and the GUI
+- A GUI for macOS and Windows, on the same core
 
 ## Licence
 
-Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your
-option.
+[MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), whichever you prefer.
+
+ffmpeg runs as a separate process and is not linked into this program. Released
+builds bundle an LGPL build of it, and prefer a system install when there is
+one.
