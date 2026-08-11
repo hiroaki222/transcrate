@@ -4,9 +4,10 @@ use serde::Serialize;
 
 use crate::device::{Codec, DeviceProfile};
 
-/// The file a conversion is about to produce.
+/// The shape of an audio stream: either one read off an existing file or one a
+/// conversion is about to produce. Both are checked the same way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub struct OutputSpec {
+pub struct AudioSpec {
     pub codec: Codec,
     pub sample_rate_hz: u32,
     /// `None` for lossy codecs, which every player lists as 16-bit only.
@@ -42,7 +43,7 @@ pub enum Issue {
 ///
 /// A player may list one codec under several rows with different limits, so a
 /// value is acceptable when *any* row admits it.
-pub fn check(spec: &OutputSpec, device: &DeviceProfile) -> Vec<Issue> {
+pub fn check(spec: &AudioSpec, device: &DeviceProfile) -> Vec<Issue> {
     let formats: Vec<_> = device.formats_for(spec.codec).collect();
     if formats.is_empty() {
         return vec![Issue::CodecUnsupported { codec: spec.codec }];
@@ -100,8 +101,8 @@ mod tests {
     use super::*;
     use crate::device::{Codec, by_id};
 
-    fn lossless(codec: Codec, sample_rate_hz: u32) -> OutputSpec {
-        OutputSpec {
+    fn lossless(codec: Codec, sample_rate_hz: u32) -> AudioSpec {
+        AudioSpec {
             codec,
             sample_rate_hz,
             bit_depth: Some(24),
@@ -144,7 +145,7 @@ mod tests {
         );
         assert!(
             check(
-                &OutputSpec {
+                &AudioSpec {
                     codec: Codec::AacLc,
                     sample_rate_hz: 44_100,
                     bit_depth: None,
@@ -161,7 +162,7 @@ mod tests {
     /// DAW.
     #[test]
     fn thirty_two_bit_is_rejected_by_every_player() {
-        let spec = OutputSpec {
+        let spec = AudioSpec {
             codec: Codec::PcmWav,
             sample_rate_hz: 44_100,
             bit_depth: Some(32),
@@ -183,7 +184,7 @@ mod tests {
     #[test]
     fn bitrate_above_the_documented_ceiling_is_reported() {
         let cdj_3000 = by_id("cdj-3000").expect("cdj-3000");
-        let spec = OutputSpec {
+        let spec = AudioSpec {
             codec: Codec::Mp3,
             sample_rate_hz: 44_100,
             bit_depth: None,
@@ -204,7 +205,7 @@ mod tests {
     #[test]
     fn independent_faults_are_all_reported() {
         let rr = by_id("xdj-rr").expect("xdj-rr");
-        let spec = OutputSpec {
+        let spec = AudioSpec {
             codec: Codec::PcmWav,
             sample_rate_hz: 96_000,
             bit_depth: Some(32),
@@ -228,7 +229,7 @@ mod tests {
     /// The default profile has to be exactly that: safe on every player here.
     #[test]
     fn cdj_safe_mp3_clears_every_player() {
-        let spec = OutputSpec {
+        let spec = AudioSpec {
             codec: Codec::Mp3,
             sample_rate_hz: 44_100,
             bit_depth: None,

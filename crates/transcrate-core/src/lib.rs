@@ -6,8 +6,9 @@
 
 pub mod compat;
 pub mod device;
+pub mod probe;
 
-pub use compat::{Issue, OutputSpec, check};
+pub use compat::{AudioSpec, Issue, check};
 pub use device::{
     Codec, DEVICES, DeviceProfile, FileSystem, FormatSupport, LossyLimits, Support, by_id,
 };
