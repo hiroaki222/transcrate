@@ -1,9 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use clap::builder::PossibleValuesParser;
 use clap::{CommandFactory, Parser, Subcommand, ValueHint};
 use clap_complete::Shell;
+use transcrate_core::convert::ConvertError;
 use transcrate_core::plan::{self, Action, Target};
 use transcrate_core::{
     AudioSpec, Codec, DEVICES, DeviceProfile, FileSystem, Issue, Support, by_id, check, convert,
@@ -69,6 +71,10 @@ enum Command {
         #[arg(short, long, value_name = "DIR", value_hint = ValueHint::DirPath)]
         output: Option<PathBuf>,
 
+        /// How many files to convert at once. Defaults to one per core.
+        #[arg(short = 'j', long, value_name = "N")]
+        jobs: Option<usize>,
+
         /// The ffmpeg binary to use.
         #[arg(long, default_value = "ffmpeg", value_name = "PATH", value_hint = ValueHint::FilePath)]
         ffmpeg: PathBuf,
@@ -105,6 +111,7 @@ fn main() -> ExitCode {
             profile,
             to,
             output,
+            jobs,
             ffmpeg,
             ffprobe,
         } => run_convert(
@@ -112,6 +119,7 @@ fn main() -> ExitCode {
             profile.as_deref(),
             to.as_deref(),
             output.as_deref(),
+            jobs,
             &ffmpeg,
             &ffprobe,
         ),
@@ -129,6 +137,7 @@ fn run_convert(
     profile: Option<&str>,
     to: Option<&str>,
     into: Option<&Path>,
+    concurrency: Option<usize>,
     ffmpeg: &Path,
     ffprobe: &Path,
 ) -> ExitCode {
@@ -140,17 +149,35 @@ fn run_convert(
         }
     };
 
+    // Plan everything before encoding anything, so a file that cannot be read
+    // is named straight away rather than after minutes of work on the rest.
+    let mut planned = Vec::new();
     let mut all_done = true;
 
     for input in files {
-        match convert_one(&target, input, into, ffmpeg, ffprobe) {
-            Ok(report) => println!("{report}"),
+        match prepare(&target, input, into, ffprobe) {
+            Ok(job) => planned.push(job),
             Err(message) => {
                 eprintln!("{message}");
                 all_done = false;
             }
         }
     }
+
+    let total = planned.len();
+    let done = AtomicUsize::new(0);
+
+    let results = convert::run_all(
+        ffmpeg,
+        &planned,
+        concurrency.unwrap_or_else(convert::default_concurrency),
+        &|index, result| {
+            let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
+            report_one(finished, total, &planned[index], result);
+        },
+    );
+
+    all_done &= results.iter().all(Result::is_ok);
 
     if all_done {
         ExitCode::SUCCESS
@@ -159,39 +186,72 @@ fn run_convert(
     }
 }
 
-fn convert_one(
+/// One line per file, written under a held lock so parallel workers cannot
+/// interleave halfway through a line.
+fn report_one(
+    finished: usize,
+    total: usize,
+    job: &convert::Job,
+    result: &Result<(), ConvertError>,
+) {
+    use std::io::Write;
+
+    let name = job.input.file_name().unwrap_or(job.input.as_os_str());
+
+    match result {
+        Ok(()) => {
+            let how = match job.plan.action {
+                Action::Copy => "copied",
+                Action::Encode { dither: true } => "encoded, dithered",
+                Action::Encode { dither: false } => "encoded",
+            };
+            let mut out = std::io::stdout().lock();
+            let _ = writeln!(
+                out,
+                "[{finished}/{total}] {} -> {}  ({how})",
+                name.display(),
+                enclosing_path(&job.output)
+            );
+        }
+        Err(error) => {
+            let mut err = std::io::stderr().lock();
+            let _ = writeln!(err, "[{finished}/{total}] {}: {error}", name.display());
+        }
+    }
+}
+
+/// A path as its own folder and name, which says where a file went without
+/// repeating the whole library path on every line.
+fn enclosing_path(path: &Path) -> String {
+    let name = path.file_name().unwrap_or(path.as_os_str());
+
+    match path.parent().and_then(Path::file_name) {
+        Some(folder) => format!("{}/{}", folder.display(), name.display()),
+        None => name.display().to_string(),
+    }
+}
+
+fn prepare(
     target: &Target,
     input: &Path,
     into: Option<&Path>,
-    ffmpeg: &Path,
     ffprobe: &Path,
-) -> Result<String, String> {
-    let failed = |error: &dyn std::fmt::Display| format!("{}: {error}", input.display());
-
-    let source = probe::run(ffprobe, input).map_err(|error| failed(&error))?;
+) -> Result<convert::Job, String> {
+    let source =
+        probe::run(ffprobe, input).map_err(|error| format!("{}: {error}", input.display()))?;
     let plan = plan::plan(&source, target);
-    let destination = output_path(input, into, plan.output.codec)?;
+    let output = output_path(input, into, plan.output.codec)?;
 
-    if let Some(parent) = destination.parent() {
+    if let Some(parent) = output.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|error| format!("{}: {error}", parent.display()))?;
     }
 
-    convert::run(ffmpeg, &plan, input, &destination).map_err(|error| failed(&error))?;
-
-    let how = match plan.action {
-        Action::Copy => "copied unchanged",
-        Action::Encode { dither: true } => "encoded, dithered",
-        Action::Encode { dither: false } => "encoded",
-    };
-
-    Ok(format!(
-        "{}\n  {} -> {}  ({how})\n  {}",
-        input.display(),
-        describe_spec(&source),
-        describe_spec(&plan.output),
-        destination.display()
-    ))
+    Ok(convert::Job {
+        plan,
+        input: input.to_path_buf(),
+        output,
+    })
 }
 
 /// Work out what to convert into.
