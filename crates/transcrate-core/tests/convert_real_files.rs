@@ -77,6 +77,121 @@ fn a_dithered_reduction_into_aiff_lands_at_the_planned_depth() {
     assert_eq!(produced.sample_rate_hz, 48_000);
 }
 
+/// Results have to line up with the jobs that produced them. Running in
+/// parallel means they finish out of order, and a failure landing at the wrong
+/// index would blame the wrong file.
+#[test]
+fn results_keep_their_order_and_a_failure_stays_at_its_index() {
+    if !tools_available() {
+        return;
+    }
+
+    let dir = workspace("convert-parallel");
+    let source_path = encode(&dir, "source.wav", 44_100, &["-c:a", "pcm_s16le"]);
+    let source = probe::run(Path::new("ffprobe"), &source_path).expect("probe source");
+    let to_aiff = plan::plan(&source, &Target::from_format("aiff").expect("aiff"));
+
+    let job = |name: &str, input: &Path| convert::Job {
+        plan: to_aiff,
+        input: input.to_path_buf(),
+        output: dir.join(name),
+    };
+
+    let missing = dir.join("does-not-exist.wav");
+    let jobs = vec![
+        job("first.aiff", &source_path),
+        job("second.aiff", &missing),
+        job("third.aiff", &source_path),
+    ];
+
+    let results = convert::run_all(Path::new("ffmpeg"), &jobs, 4, &|_, _| {});
+
+    assert_eq!(results.len(), 3);
+    assert!(results[0].is_ok(), "{:?}", results[0]);
+    assert!(results[1].is_err(), "a missing input should fail");
+    assert!(results[2].is_ok(), "{:?}", results[2]);
+}
+
+/// Every job has to run, however many workers there are and however few jobs.
+#[test]
+fn all_jobs_run_whatever_the_concurrency() {
+    if !tools_available() {
+        return;
+    }
+
+    let dir = workspace("convert-parallel-all");
+    let source_path = encode(&dir, "source.wav", 44_100, &["-c:a", "pcm_s16le"]);
+    let source = probe::run(Path::new("ffprobe"), &source_path).expect("probe source");
+    let to_aiff = plan::plan(&source, &Target::from_format("aiff").expect("aiff"));
+
+    for concurrency in [1, 3, 16] {
+        let jobs: Vec<_> = (0..5)
+            .map(|index| convert::Job {
+                plan: to_aiff,
+                input: source_path.clone(),
+                output: dir.join(format!("out-{concurrency}-{index}.aiff")),
+            })
+            .collect();
+
+        let results = convert::run_all(Path::new("ffmpeg"), &jobs, concurrency, &|_, _| {});
+
+        assert_eq!(results.len(), 5);
+        assert!(
+            results.iter().all(Result::is_ok),
+            "concurrency {concurrency}: {results:?}"
+        );
+        for job in &jobs {
+            assert!(
+                job.output.exists(),
+                "{} was not written",
+                job.output.display()
+            );
+        }
+    }
+}
+
+#[test]
+fn the_default_concurrency_is_at_least_one() {
+    assert!(convert::default_concurrency() >= 1);
+}
+
+/// A folder of a hundred tracks must not sit silent until the last one lands.
+/// Completions are reported as they happen, which is also what a progress bar
+/// will need later.
+#[test]
+fn each_completion_is_reported_as_it_happens() {
+    if !tools_available() {
+        return;
+    }
+
+    let dir = workspace("convert-parallel-reports");
+    let source_path = encode(&dir, "source.wav", 44_100, &["-c:a", "pcm_s16le"]);
+    let source = probe::run(Path::new("ffprobe"), &source_path).expect("probe source");
+    let to_aiff = plan::plan(&source, &Target::from_format("aiff").expect("aiff"));
+
+    let jobs: Vec<_> = (0..6)
+        .map(|index| convert::Job {
+            plan: to_aiff,
+            input: source_path.clone(),
+            output: dir.join(format!("reported-{index}.aiff")),
+        })
+        .collect();
+
+    let seen = std::sync::Mutex::new(Vec::new());
+    let results = convert::run_all(Path::new("ffmpeg"), &jobs, 3, &|index, result| {
+        seen.lock()
+            .expect("seen lock")
+            .push((index, result.is_ok()));
+    });
+
+    let mut reported = seen.into_inner().expect("seen lock");
+    reported.sort_unstable();
+
+    assert_eq!(reported.len(), jobs.len(), "not every job was reported");
+    assert!(reported.iter().all(|(_, ok)| *ok), "{reported:?}");
+    assert_eq!(results.len(), jobs.len());
+}
+
 /// A copy has to leave the bytes alone. Re-encoding a file that already matches
 /// would spend time to produce something slightly worse.
 #[test]

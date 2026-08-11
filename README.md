@@ -39,8 +39,30 @@ CDJ-2000NXS2   2016     48k   48k    96k    96k    96k    96k  no
 Convert a folder. Needs ffmpeg on your PATH:
 
 ```sh
-cargo run -p transcrate-cli -- convert ~/Music/*.flac
+cargo run -p transcrate-cli -- convert ~/Music
 ```
+
+Three ways to say "all of them":
+
+```sh
+transcrate convert ~/Music              # the folder, subfolders and all
+transcrate convert *                    # whatever the shell expands, audio only
+transcrate convert a.wav b.flac         # named one by one
+```
+
+A folder sweep and a glob both keep only the audio, so artwork and playlists are
+skipped rather than reported as failures. A previous run's `_transcrate` folder
+is skipped too, and converting twice does not re-encode what came out the first
+time.
+
+One path named on its own is always attempted, whatever its extension: someone
+who typed a single filename meant that file, and ffprobe judges it better than
+the extension does.
+
+Options go on either side of the files, so `convert -p lossless track.wav` and
+`convert track.wav -p lossless` are the same command. Track names full of `&`
+and brackets are easier through the folder form, or by letting tab completion
+escape them for you.
 
 ```
 ~/Music/track.flac
@@ -54,6 +76,11 @@ cargo run -p transcrate-cli -- convert ~/Music/*.flac
 Results land in a `_transcrate` folder beside each input, and the source is
 never written to. Anything already in the target format is copied rather than
 re-encoded, which is both faster and kinder to a lossy original.
+
+Files convert in parallel, one per core, and each line appears as that file
+lands. Fourteen 60-second 96 kHz FLACs down to MP3 took 2.96 s one at a time
+and 0.56 s across 14 cores here — the same CPU time, five times less waiting.
+`-j N` caps the number of jobs if you want the machine back.
 
 Three profiles, chosen with `-p`:
 
@@ -101,7 +128,44 @@ Narrow it to the gear you are actually taking:
 cargo run -p transcrate-cli -- check ~/Music/*.flac --device cdj-3000,xdj-rr
 ```
 
+`--failing` leaves out everything that already plays, so a folder prints only
+what needs doing:
+
+```sh
+transcrate check ~/Music --failing -d xdj-rr
+```
+
+```
+./float32.wav
+  WAV 48 kHz 32-bit
+  XDJ-RR         32-bit is not supported for WAV
+
+./hires.flac
+  FLAC 96 kHz 24-bit
+  XDJ-RR         FLAC is not supported
+
+2 of 6 rejected
+```
+
+Failing means *any* of the named players rejects it, not all of them: a track
+that plays on nine out of ten is still the one that stops the set.
+
+A counter runs on stderr while it works, and only when stderr is a terminal, so
+piping the report into a file or another program keeps it clean.
+
 It exits non-zero if anything is rejected, so it can gate a script.
+
+### Installing it on your PATH
+
+```sh
+cargo install --path crates/transcrate-cli --locked
+transcrate completions zsh > ~/.zfunc/_transcrate
+```
+
+Run both again after pulling. The binary and the completion script are
+generated separately, so a stale install answers `unrecognized subcommand` for
+a command the source has, and a stale completion offers flags that no longer
+exist.
 
 ### Shell completion
 

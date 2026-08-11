@@ -37,8 +37,29 @@ CDJ-2000NXS2   2016     48k   48k    96k    96k    96k    96k  no
 フォルダごと変換する. ffmpeg が PATH に必要:
 
 ```sh
-cargo run -p transcrate-cli -- convert ~/Music/*.flac
+cargo run -p transcrate-cli -- convert ~/Music
 ```
+
+「全部」を指定する方法は 3 つある:
+
+```sh
+transcrate convert ~/Music              # フォルダごと (サブフォルダも含む)
+transcrate convert *                    # シェルが展開したもののうち音声だけ
+transcrate convert a.wav b.flac         # 個別に指定
+```
+
+フォルダ指定でもグロブでも音声ファイルだけを拾うため, ジャケット画像や
+プレイリストはエラーにならず単に無視される. 前回の実行で作られた `_transcrate`
+フォルダも除外されるので, 二度実行しても出力を再変換することはない.
+
+ただしパスを 1 つだけ指定した場合は, 拡張子に関係なく必ず処理を試みる. 単一の
+ファイル名を打った人はそのファイルを指定したのであって, 拡張子より ffprobe の
+判定の方が正確だからである.
+
+オプションはファイル名の前後どちらに置いてもよい. `convert -p lossless
+track.wav` と `convert track.wav -p lossless` は同じ意味になる. 曲名に `&` や
+括弧が多く含まれる場合は, フォルダ指定を使うか, tab 補完にエスケープさせると
+楽になる.
 
 ```
 ~/Music/track.flac
@@ -52,6 +73,11 @@ cargo run -p transcrate-cli -- convert ~/Music/*.flac
 出力は入力と同じ階層の `_transcrate` フォルダに置かれる. 元ファイルには一切
 書き込まない. 既に目的の形式になっているファイルは再エンコードせずコピーする.
 速いうえに, ロッシー音源を二度潰さずに済む.
+
+変換はコア数ぶん並列で走り, 各行は変換が終わったものから順に出る. 60 秒の
+96 kHz FLAC 14 本を MP3 に変換した場合, 逐次で 2.96 秒, 14 コア並列で 0.56 秒
+だった (この環境での実測). CPU 時間は同じで, 待ち時間だけが 5 分の 1 になる.
+`-j N` で並列数を制限できる.
 
 プロファイルは 3 つ. `-p` で選ぶ:
 
@@ -99,7 +125,44 @@ cargo run -p transcrate-cli -- check ~/Music/track.flac
 cargo run -p transcrate-cli -- check ~/Music/*.flac --device cdj-3000,xdj-rr
 ```
 
+`--failing` を付けると, 既に再生できるファイルは表示されず, 対処が必要な
+ものだけが残る:
+
+```sh
+transcrate check ~/Music --failing -d xdj-rr
+```
+
+```
+./float32.wav
+  WAV 48 kHz 32-bit
+  XDJ-RR         32-bit is not supported for WAV
+
+./hires.flac
+  FLAC 96 kHz 24-bit
+  XDJ-RR         FLAC is not supported
+
+2 of 6 rejected
+```
+
+ここでの「失敗」は, 指定した機種の**いずれか 1 つでも**再生できないことを指す.
+10 機種のうち 9 機種で鳴っても, 残り 1 機種が現場にあればセットは止まる.
+
+処理中は進捗が stderr に表示される. ただし stderr が端末のときだけなので,
+結果をファイルや他のコマンドにパイプしても出力は汚れない.
+
 1 つでも弾かれた場合は非ゼロで終了するので, スクリプトの判定に使える.
+
+### PATH に入れる
+
+```sh
+cargo install --path crates/transcrate-cli --locked
+transcrate completions zsh > ~/.zfunc/_transcrate
+```
+
+pull したあとは両方とも実行し直すこと. バイナリと補完スクリプトは別々に生成
+されるため, 古いバイナリのままだとソースにあるはずのコマンドが
+`unrecognized subcommand` になり, 古い補完スクリプトは存在しないフラグを
+候補に出す.
 
 ### シェル補完
 

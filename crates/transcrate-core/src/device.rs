@@ -249,24 +249,40 @@ const FS_EXFAT_DISPUTED: &[(FileSystem, Support)] = &[
     (FileSystem::Ntfs, Support::No),
 ];
 
-/// Every player this program checks against, newest first.
+/// Every player this program checks against.
+///
+/// This order is the order they are reported in: the separate decks first and
+/// the all-in-ones after, each group newest first, with the portable and
+/// four-channel units last. It follows how likely a booth is to have one rather
+/// than release date, so the machines most people are actually standing in
+/// front of come first.
 pub const DEVICES: &[DeviceProfile] = &[
-    DeviceProfile {
-        id: "xdj-an",
-        display_name: "XDJ-AN",
-        release_year: 2026,
-        formats: FORMATS_LOSSLESS_48K,
-        filesystems: FS_WITH_EXFAT,
-        max_folder_depth: 8,
-        max_files_per_folder: Some(10_000),
-        max_artwork_px: Some(800),
-    },
     DeviceProfile {
         id: "cdj-3000x",
         display_name: "CDJ-3000X",
         release_year: 2025,
         formats: FORMATS_HIRES,
         filesystems: FS_WITH_EXFAT,
+        max_folder_depth: 8,
+        max_files_per_folder: Some(10_000),
+        max_artwork_px: None,
+    },
+    DeviceProfile {
+        id: "cdj-3000",
+        display_name: "CDJ-3000",
+        release_year: 2020,
+        formats: FORMATS_HIRES,
+        filesystems: FS_WITH_EXFAT,
+        max_folder_depth: 8,
+        max_files_per_folder: Some(10_000),
+        max_artwork_px: None,
+    },
+    DeviceProfile {
+        id: "cdj-2000nxs2",
+        display_name: "CDJ-2000NXS2",
+        release_year: 2016,
+        formats: FORMATS_NXS2,
+        filesystems: FS_NO_EXFAT,
         max_folder_depth: 8,
         max_files_per_folder: Some(10_000),
         max_artwork_px: None,
@@ -280,6 +296,46 @@ pub const DEVICES: &[DeviceProfile] = &[
         max_folder_depth: 8,
         max_files_per_folder: Some(10_000),
         max_artwork_px: None,
+    },
+    DeviceProfile {
+        id: "xdj-an",
+        display_name: "XDJ-AN",
+        release_year: 2026,
+        formats: FORMATS_LOSSLESS_48K,
+        filesystems: FS_WITH_EXFAT,
+        max_folder_depth: 8,
+        max_files_per_folder: Some(10_000),
+        max_artwork_px: Some(800),
+    },
+    DeviceProfile {
+        id: "xdj-xz",
+        display_name: "XDJ-XZ",
+        release_year: 2019,
+        formats: FORMATS_FLAC_NO_ALAC,
+        filesystems: FS_EXFAT_DISPUTED,
+        max_folder_depth: 8,
+        max_files_per_folder: Some(10_000),
+        max_artwork_px: None,
+    },
+    DeviceProfile {
+        id: "xdj-rx3",
+        display_name: "XDJ-RX3",
+        release_year: 2021,
+        formats: FORMATS_FLAC_NO_ALAC,
+        filesystems: FS_WITH_EXFAT,
+        max_folder_depth: 8,
+        max_files_per_folder: Some(10_000),
+        max_artwork_px: None,
+    },
+    DeviceProfile {
+        id: "xdj-rr",
+        display_name: "XDJ-RR",
+        release_year: 2018,
+        formats: FORMATS_PCM_ONLY,
+        filesystems: FS_NO_EXFAT,
+        max_folder_depth: 8,
+        max_files_per_folder: Some(10_000),
+        max_artwork_px: Some(800),
     },
     DeviceProfile {
         id: "omnis-duo",
@@ -301,61 +357,36 @@ pub const DEVICES: &[DeviceProfile] = &[
         max_files_per_folder: Some(10_000),
         max_artwork_px: None,
     },
-    DeviceProfile {
-        id: "xdj-rx3",
-        display_name: "XDJ-RX3",
-        release_year: 2021,
-        formats: FORMATS_FLAC_NO_ALAC,
-        filesystems: FS_WITH_EXFAT,
-        max_folder_depth: 8,
-        max_files_per_folder: Some(10_000),
-        max_artwork_px: None,
-    },
-    DeviceProfile {
-        id: "cdj-3000",
-        display_name: "CDJ-3000",
-        release_year: 2020,
-        formats: FORMATS_HIRES,
-        filesystems: FS_WITH_EXFAT,
-        max_folder_depth: 8,
-        max_files_per_folder: Some(10_000),
-        max_artwork_px: None,
-    },
-    DeviceProfile {
-        id: "xdj-xz",
-        display_name: "XDJ-XZ",
-        release_year: 2019,
-        formats: FORMATS_FLAC_NO_ALAC,
-        filesystems: FS_EXFAT_DISPUTED,
-        max_folder_depth: 8,
-        max_files_per_folder: Some(10_000),
-        max_artwork_px: None,
-    },
-    DeviceProfile {
-        id: "xdj-rr",
-        display_name: "XDJ-RR",
-        release_year: 2018,
-        formats: FORMATS_PCM_ONLY,
-        filesystems: FS_NO_EXFAT,
-        max_folder_depth: 8,
-        max_files_per_folder: Some(10_000),
-        max_artwork_px: Some(800),
-    },
-    DeviceProfile {
-        id: "cdj-2000nxs2",
-        display_name: "CDJ-2000NXS2",
-        release_year: 2016,
-        formats: FORMATS_NXS2,
-        filesystems: FS_NO_EXFAT,
-        max_folder_depth: 8,
-        max_files_per_folder: Some(10_000),
-        max_artwork_px: None,
-    },
 ];
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The listing order is a decision, not an accident: separate decks before
+    /// all-in-ones, newest first inside each group, portable and four-channel
+    /// units last. Pinning it here means a device added in the wrong place
+    /// fails rather than quietly reordering everyone's output.
+    #[test]
+    fn devices_are_listed_in_the_intended_order() {
+        let ids: Vec<_> = DEVICES.iter().map(|device| device.id).collect();
+
+        assert_eq!(
+            ids,
+            [
+                "cdj-3000x",
+                "cdj-3000",
+                "cdj-2000nxs2",
+                "xdj-az",
+                "xdj-an",
+                "xdj-xz",
+                "xdj-rx3",
+                "xdj-rr",
+                "omnis-duo",
+                "opus-quad",
+            ]
+        );
+    }
 
     #[test]
     fn device_ids_are_unique() {
