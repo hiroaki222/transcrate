@@ -2,41 +2,22 @@
 
 [日本語](README.ja.md)
 
-Audio transcoder for DJs, built on ffmpeg, that knows what your gear can
-actually play.
+Convert tracks for your USB stick, and know they will play before you get to the
+club.
 
-## Why
+Transcrate converts audio with ffmpeg and checks the result against what CDJs
+and XDJs actually accept: codecs, sample rates, bit depths and filesystems,
+taken from the manufacturers' manuals.
 
-Converting tracks for a USB stick looks solved until the gear disagrees with
-itself:
+**Status: early.** `devices` and `check` work. Conversion is not built yet.
 
-- A CDJ-2000NXS2 from 2016 plays 96 kHz FLAC. An XDJ-AN from 2026 stops at
-  48 kHz. Newer is not more capable.
-- That same CDJ-2000NXS2 cannot read an exFAT stick, which every player from
-  2020 onward can. The XDJ-RX3 reads exFAT but rejects 96 kHz. The two limits
-  cross, so the players cannot be ranked on one scale.
-- `.m4a` holds either AAC or ALAC. Several players accept only AAC and answer
-  the other with error `E-8305`, and the file extension warns you of nothing.
+## Build
 
-Transcrate keeps the published limits of each player in one table, checks your
-output against the machines you are actually going to plug into, and tells you
-before you are standing in the booth.
-
-## What works today
-
-The compatibility table and the `devices` command. Conversion is not built yet.
-
-## Requirements
-
-- Rust 1.88 or newer
-
-ffmpeg is not required yet. Once conversion lands it will be invoked as a
-separate process, using a system installation when one is present and a bundled
-LGPL build otherwise.
-
-## Build and run
+Needs Rust 1.88 or newer.
 
 ```sh
+git clone https://github.com/hiroaki222/transcrate
+cd transcrate
 cargo run -p transcrate-cli -- devices
 ```
 
@@ -54,6 +35,32 @@ XDJ-RR         2018     48k   48k    48k    48k      -      -  no
 CDJ-2000NXS2   2016     48k   48k    96k    96k    96k    96k  no
 ```
 
+Ask what a file will play on. This one needs `ffprobe` on your PATH, which comes
+with ffmpeg:
+
+```sh
+cargo run -p transcrate-cli -- check ~/Music/track.flac
+```
+
+```
+~/Music/track.flac
+  FLAC 96 kHz 24-bit
+  plays on       CDJ-3000X, XDJ-AZ, OPUS-QUAD, CDJ-3000, CDJ-2000NXS2
+  XDJ-AN         96 kHz is not supported for FLAC
+  OMNIS-DUO      96 kHz is not supported for FLAC
+  XDJ-RX3        96 kHz is not supported for FLAC
+  XDJ-XZ         96 kHz is not supported for FLAC
+  XDJ-RR         FLAC is not supported
+```
+
+Narrow it to the gear you are actually taking:
+
+```sh
+cargo run -p transcrate-cli -- check ~/Music/*.flac --device cdj-3000,xdj-rr
+```
+
+It exits non-zero if anything is rejected, so it can gate a script.
+
 Tests and lints, the same three CI runs:
 
 ```sh
@@ -62,24 +69,54 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 ```
 
-## Compatibility data
+## Why
 
-Every figure in the table comes from the manufacturer's own operating
-instructions, with the document number recorded in
-[docs/device-compatibility.md](docs/device-compatibility.md). Where the official
-sources contradict each other — the XDJ-XZ and exFAT — the table records the
-disagreement rather than picking a side.
+DJ gear disagrees with itself, and not in ways you can guess:
 
-## Planned
+- **A CDJ-2000NXS2 from 2016 plays 96 kHz FLAC. An XDJ-AN from 2026 stops at
+  48 kHz.** Newer is not better.
+- **That same NXS2 cannot read an exFAT stick.** Everything from 2020 on can —
+  except the XDJ-RX3, which reads exFAT and refuses 96 kHz. The limits cross,
+  so you cannot rank the players on one scale.
+- **`.m4a` holds either AAC or ALAC.** Some players take only AAC and throw
+  `E-8305` at the other. The extension gives you no warning.
 
-- Convert between WAV, FLAC, AIFF, M4A and MP3 with DJ-appropriate defaults
-- Warnings per player, from the table above
-- Read-only USB diagnostics, which never write to or format a drive
-- Per-field metadata control: keep, clear or overwrite
-- Profiles shared between the command line and the GUI
-- A Tauri GUI for macOS and Windows, over the same core
+Get one of these wrong and you find out in the booth.
+
+## Where the numbers come from
+
+Every figure is from a manufacturer's manual, with the document number recorded
+in [docs/device-compatibility.md](docs/device-compatibility.md).
+
+Where the official sources contradict each other — the XDJ-XZ and exFAT — the
+table says so rather than picking a side.
+
+## Roadmap
+
+- Convert between WAV, FLAC, AIFF, M4A and MP3
+- Warn per player, from the table above
+- Check a USB stick. Read-only: it never writes to your drive
+- Keep, clear or overwrite metadata field by field
+- Profiles shared by the CLI and the GUI
+- A GUI for macOS and Windows, on the same core
+
+## Releases
+
+None yet. When they start:
+
+- **CLI** — a Homebrew tap and prebuilt binaries.
+- **GUI** — `.dmg` and `.msi`, unsigned. An Apple developer certificate costs
+  $99 a year, which is hard to justify before anyone is using this. macOS blocks
+  an unsigned app the first time it is opened, and Apple documents the way
+  through: [Open a Mac app from an unknown developer][unsigned-mac]. You do it
+  once. On Windows, SmartScreen asks for **More info → Run anyway**.
+
+[unsigned-mac]: https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac
 
 ## Licence
 
-Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your
-option.
+[MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), whichever you prefer.
+
+ffmpeg runs as a separate process and is not linked into this program. Released
+builds bundle an LGPL build of it, and prefer a system install when there is
+one.
