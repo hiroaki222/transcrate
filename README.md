@@ -150,6 +150,9 @@ transcrate check ~/Music --failing -d xdj-rr
 Failing means *any* of the named players rejects it, not all of them: a track
 that plays on nine out of ten is still the one that stops the set.
 
+A counter runs on stderr while it works, and only when stderr is a terminal, so
+piping the report into a file or another program keeps it clean.
+
 It exits non-zero if anything is rejected, so it can gate a script.
 
 ### Installing it on your PATH

@@ -510,9 +510,15 @@ fn run_check(
 
     let mut all_clear = true;
     let mut rejected_count = 0usize;
+    let progress = Progress::new(inputs.len());
 
-    for file in &inputs {
-        match probe::run(ffprobe, file) {
+    for (index, file) in inputs.iter().enumerate() {
+        progress.show(index + 1);
+        let outcome = probe::run(ffprobe, file);
+        // Anything printed has to appear above the counter, not through it.
+        progress.clear();
+
+        match outcome {
             Ok(spec) => {
                 let failing = rejected_anywhere(&spec, &players);
                 if failing {
@@ -533,6 +539,8 @@ fn run_check(
         }
     }
 
+    progress.clear();
+
     // One file speaks for itself; a folder needs a count, or a clean run under
     // --failing prints nothing at all and looks like it did not work.
     if inputs.len() > 1 {
@@ -544,6 +552,54 @@ fn run_check(
     } else {
         ExitCode::FAILURE
     }
+}
+
+/// A counter that overwrites its own line on stderr.
+///
+/// stderr rather than stdout so the report can still be piped somewhere, and
+/// only to a terminal: redirected to a file, this would collect a carriage
+/// return per track and nothing readable.
+struct Progress {
+    total: usize,
+    to_a_terminal: bool,
+}
+
+impl Progress {
+    fn new(total: usize) -> Self {
+        use std::io::IsTerminal;
+        Self {
+            total,
+            to_a_terminal: std::io::stderr().is_terminal(),
+        }
+    }
+
+    fn show(&self, done: usize) {
+        use std::io::Write;
+        if !self.to_a_terminal {
+            return;
+        }
+        let mut err = std::io::stderr().lock();
+        let _ = write!(err, "{}", progress_line(done, self.total));
+        let _ = err.flush();
+    }
+
+    /// Wipe the counter before anything is printed above it, so a result never
+    /// lands on top of a half-written line.
+    fn clear(&self) {
+        use std::io::Write;
+        if !self.to_a_terminal {
+            return;
+        }
+        let mut err = std::io::stderr().lock();
+        let _ = write!(err, "\r\x1b[K");
+        let _ = err.flush();
+    }
+}
+
+/// `\r` returns to column zero and `\x1b[K` wipes what was there, so a shorter
+/// count does not leave the tail of a longer one behind.
+fn progress_line(done: usize, total: usize) -> String {
+    format!("\r\x1b[Kchecking {done}/{total}")
 }
 
 /// Whether any of `players` refuses this file.
@@ -959,6 +1015,20 @@ mod tests {
                 .expect("path");
             assert_eq!(path.extension().and_then(|e| e.to_str()), Some(expected));
         }
+    }
+
+    /// The counter has to overwrite itself rather than scroll, or a folder of
+    /// two hundred leaves two hundred lines of progress above the report.
+    #[test]
+    fn progress_returns_to_the_start_of_its_own_line() {
+        let line = progress_line(3, 10);
+
+        assert!(
+            line.starts_with('\r'),
+            "does not return to column zero: {line:?}"
+        );
+        assert!(line.contains("3/10"), "does not say where it is: {line:?}");
+        assert!(!line.contains('\n'), "a newline would scroll it: {line:?}");
     }
 
     /// "Any player rejects it", not "every player rejects it". A track that
