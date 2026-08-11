@@ -111,6 +111,18 @@ cargo run -p transcrate-cli -- check ~/Music/*.flac --device cdj-3000,xdj-rr
 
 1 つでも弾かれた場合は非ゼロで終了するので, スクリプトの判定に使える.
 
+### PATH に入れる
+
+```sh
+cargo install --path crates/transcrate-cli --locked
+transcrate completions zsh > ~/.zfunc/_transcrate
+```
+
+pull したあとは両方とも実行し直すこと. バイナリと補完スクリプトは別々に生成
+されるため, 古いバイナリのままだとソースにあるはずのコマンドが
+`unrecognized subcommand` になり, 古い補完スクリプトは存在しないフラグを
+候補に出す.
+
 ### シェル補完
 
 ```sh

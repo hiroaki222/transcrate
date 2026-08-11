@@ -114,6 +114,18 @@ cargo run -p transcrate-cli -- check ~/Music/*.flac --device cdj-3000,xdj-rr
 
 It exits non-zero if anything is rejected, so it can gate a script.
 
+### Installing it on your PATH
+
+```sh
+cargo install --path crates/transcrate-cli --locked
+transcrate completions zsh > ~/.zfunc/_transcrate
+```
+
+Run both again after pulling. The binary and the completion script are
+generated separately, so a stale install answers `unrecognized subcommand` for
+a command the source has, and a stale completion offers flags that no longer
+exist.
+
 ### Shell completion
 
 ```sh
