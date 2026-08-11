@@ -16,6 +16,19 @@ transcrate-core = { path = "crates/transcrate-core" }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Every public item would otherwise want a #[must_use], which says nothing here.
+must_use_candidate = "allow"
+# `device::DeviceProfile` reads better than the alternatives.
+module_name_repetitions = "allow"
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

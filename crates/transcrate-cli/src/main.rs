@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use transcrate_core::{Codec, DeviceProfile, FileSystem, Support, DEVICES};
+use transcrate_core::{Codec, DEVICES, DeviceProfile, FileSystem, Support};
 
 /// Fast, DJ-oriented audio transcoder built on ffmpeg.
 #[derive(Debug, Parser)]

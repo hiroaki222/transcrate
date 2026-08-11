@@ -140,7 +140,10 @@ const fn mp3(sample_rates_hz: &'static [u32], vbr: Support) -> FormatSupport {
         codec: Codec::Mp3,
         sample_rates_hz,
         bit_depths: DEPTHS_LOSSY,
-        lossy: Some(LossyLimits { bitrate_kbps: (32, 320), vbr }),
+        lossy: Some(LossyLimits {
+            bitrate_kbps: (32, 320),
+            vbr,
+        }),
     }
 }
 
@@ -149,12 +152,20 @@ const fn aac(sample_rates_hz: &'static [u32], vbr: Support) -> FormatSupport {
         codec: Codec::AacLc,
         sample_rates_hz,
         bit_depths: DEPTHS_LOSSY,
-        lossy: Some(LossyLimits { bitrate_kbps: (16, 320), vbr }),
+        lossy: Some(LossyLimits {
+            bitrate_kbps: (16, 320),
+            vbr,
+        }),
     }
 }
 
 const fn lossless(codec: Codec, sample_rates_hz: &'static [u32]) -> FormatSupport {
-    FormatSupport { codec, sample_rates_hz, bit_depths: DEPTHS_PCM, lossy: None }
+    FormatSupport {
+        codec,
+        sample_rates_hz,
+        bit_depths: DEPTHS_PCM,
+        lossy: None,
+    }
 }
 
 /// CDJ-3000, CDJ-3000X, XDJ-AZ and OPUS-QUAD: lossy capped at 48 kHz, all four
@@ -389,7 +400,10 @@ mod tests {
         let nxs2 = by_id("cdj-2000nxs2").expect("cdj-2000nxs2");
 
         let flac_rates = |d: &DeviceProfile| {
-            d.formats_for(Codec::Flac).next().expect("flac").sample_rates_hz
+            d.formats_for(Codec::Flac)
+                .next()
+                .expect("flac")
+                .sample_rates_hz
         };
         assert!(!flac_rates(xdj_an).contains(&96_000));
         assert!(flac_rates(nxs2).contains(&96_000));

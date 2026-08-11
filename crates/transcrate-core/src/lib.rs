@@ -7,5 +7,5 @@
 pub mod device;
 
 pub use device::{
-    by_id, Codec, DeviceProfile, FileSystem, FormatSupport, LossyLimits, Support, DEVICES,
+    Codec, DEVICES, DeviceProfile, FileSystem, FormatSupport, LossyLimits, Support, by_id,
 };

@@ -52,11 +52,12 @@ XDJ-RR         2018     48k   48k    48k    48k      -      -  no
 CDJ-2000NXS2   2016     48k   48k    96k    96k    96k    96k  no
 ```
 
-Tests and lints:
+Tests and lints, the same three CI runs:
 
 ```sh
-cargo test
-cargo clippy --all-targets
+cargo fmt --all --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
 ```
 
 ## Compatibility data

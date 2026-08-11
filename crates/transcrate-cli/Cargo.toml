@@ -11,6 +11,9 @@ description = "Command-line interface for Transcrate"
 name = "transcrate"
 path = "src/main.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 transcrate-core = { workspace = true }
 
