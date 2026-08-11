@@ -34,7 +34,21 @@ jobs:
       # The runners do not ship ffmpeg. The integration tests are the only ones
       # that put an argument list in front of a real encoder, and they refuse to
       # run without it rather than skipping, so this is what keeps them honest.
-      - uses: FedericoCarboni/setup-ffmpeg@v3
+      #
+      # Each platform's own package manager rather than a setup action: the
+      # actions distribute static builds, and there is not always one for the
+      # arm64 macOS runners.
+      - name: Install ffmpeg
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            Linux)   sudo apt-get update && sudo apt-get install -y ffmpeg ;;
+            macOS)   brew install ffmpeg ;;
+            Windows) choco install ffmpeg --no-progress --yes ;;
+            *)       echo "no ffmpeg recipe for ${{ runner.os }}" >&2; exit 1 ;;
+          esac
+          ffmpeg -version | head -1
+          ffprobe -version | head -1
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
