@@ -1,5 +1,7 @@
 # Transcrate
 
+[日本語](README.ja.md)
+
 Audio transcoder for DJs, built on ffmpeg, that knows what your gear can
 actually play.
 

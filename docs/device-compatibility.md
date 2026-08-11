@@ -1,5 +1,7 @@
 # Device compatibility data
 
+[日本語](device-compatibility.ja.md)
+
 The source behind `crates/transcrate-core/src/device.rs`. Every value in that
 table traces back to a document listed here. Nothing goes into the table on the
 strength of a forum post or a blog.
@@ -64,6 +66,13 @@ newest revision) states exFAT is not supported. Two later support articles list
 the XDJ-XZ among the players that do support it. No firmware changelog entry
 mentions adding it. Neither claim has been withdrawn, so the table records the
 contradiction instead of picking a side.
+
+**Silence is not denial.** The CDJ-3000 manual lists FAT16, FAT32 and HFS+, and
+names only NTFS as unsupported; exFAT appears nowhere in it. A later support
+article lists the CDJ-3000 among the players that do read exFAT. Nothing was
+contradicted here — the manual simply did not say — so the table records exFAT
+as supported. That is the difference from the XDJ-XZ, whose manual rules exFAT
+out in as many words. An omission is filled in; a contradiction is preserved.
 
 **No player has ever gained a codec through firmware, with one exception.** The
 XDJ-XZ gained FLAC in firmware 1.10. Every other format table in this document
