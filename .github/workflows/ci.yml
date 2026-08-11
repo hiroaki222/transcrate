@@ -30,6 +30,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
+      # The runners do not ship ffmpeg. The integration tests are the only ones
+      # that put an argument list in front of a real encoder, and they refuse to
+      # run without it rather than skipping, so this is what keeps them honest.
+      - uses: FedericoCarboni/setup-ffmpeg@v3
+
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --all-features
