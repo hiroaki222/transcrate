@@ -42,11 +42,27 @@ Convert a folder. Needs ffmpeg on your PATH:
 cargo run -p transcrate-cli -- convert ~/Music
 ```
 
-Point it at a folder and it sweeps the audio inside, subfolders and all, while
-leaving artwork and playlists alone. A previous run's `_transcrate` folder is
-skipped, so converting twice does not re-encode what came out the first time.
-Naming files directly works too, and a named file is taken as given whatever it
-is called.
+Three ways to say "all of them":
+
+```sh
+transcrate convert ~/Music              # the folder, subfolders and all
+transcrate convert *                    # whatever the shell expands, audio only
+transcrate convert a.wav b.flac         # named one by one
+```
+
+A folder sweep and a glob both keep only the audio, so artwork and playlists are
+skipped rather than reported as failures. A previous run's `_transcrate` folder
+is skipped too, and converting twice does not re-encode what came out the first
+time.
+
+One path named on its own is always attempted, whatever its extension: someone
+who typed a single filename meant that file, and ffprobe judges it better than
+the extension does.
+
+Options go on either side of the files, so `convert -p lossless track.wav` and
+`convert track.wav -p lossless` are the same command. Track names full of `&`
+and brackets are easier through the folder form, or by letting tab completion
+escape them for you.
 
 ```
 ~/Music/track.flac

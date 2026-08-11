@@ -200,6 +200,11 @@ fn run_convert(
     // Plan everything before encoding anything, so a file that cannot be read
     // is named straight away rather than after minutes of work on the rest.
     let inputs = collect_inputs(files);
+    if inputs.is_empty() {
+        eprintln!("no audio files among the paths given");
+        return ExitCode::FAILURE;
+    }
+
     let mut planned = Vec::new();
     let mut all_done = true;
 
@@ -372,16 +377,19 @@ const OUTPUT_FOLDER: &str = "_transcrate";
 
 /// Expand directories into the audio inside them, recursively.
 ///
-/// A named file is taken as given whatever it is called: the extension filter
-/// exists to keep artwork and sleeve notes out of a folder sweep, not to
-/// overrule someone who pointed at a specific file.
+/// One path on its own is taken at its word, whatever it is called: someone who
+/// typed a single filename meant that file, and ffprobe judges it better than
+/// the extension does. Several at once is almost always a glob the shell
+/// expanded, and a shell hands over the artwork and the playlists too — so
+/// there, only audio comes through.
 fn collect_inputs(paths: &[PathBuf]) -> Vec<PathBuf> {
+    let expanded_by_the_shell = paths.len() > 1;
     let mut found = Vec::new();
 
     for path in paths {
         if path.is_dir() {
             sweep(path, &mut found);
-        } else {
+        } else if !expanded_by_the_shell || is_audio(path) {
             found.push(path.clone());
         }
     }
@@ -474,9 +482,15 @@ fn run_check(files: &[PathBuf], device_ids: &[String], ffprobe: &Path) -> ExitCo
         }
     };
 
+    let inputs = collect_inputs(files);
+    if inputs.is_empty() {
+        eprintln!("no audio files among the paths given");
+        return ExitCode::FAILURE;
+    }
+
     let mut all_clear = true;
 
-    for file in &collect_inputs(files) {
+    for file in &inputs {
         match probe::run(ffprobe, file) {
             Ok(spec) => all_clear &= report(file, &spec, &players),
             Err(error) => {
@@ -769,16 +783,40 @@ mod tests {
         assert_eq!(names, ["track.wav"]);
     }
 
-    /// A named file is taken as given, whatever it is called. The extension
-    /// filter exists to keep artwork out of a folder sweep, not to overrule
-    /// someone who pointed at a specific file.
+    /// One path named on its own is taken at its word, whatever it is called.
+    /// Someone who typed a single filename meant that file, and ffprobe is a
+    /// better judge of it than the extension.
     #[test]
-    fn a_named_file_is_taken_as_given() {
+    fn a_single_named_file_is_taken_as_given() {
         let dir = scratch("collect-explicit");
         let odd = dir.join("no-extension");
         std::fs::write(&odd, b"").expect("write");
 
         assert_eq!(collect_inputs(std::slice::from_ref(&odd)), vec![odd]);
+    }
+
+    /// `transcrate convert *` is the obvious way to do a folder from the shell,
+    /// and the shell hands over everything in it: artwork, playlists, notes.
+    /// Reporting each of those as a failure would bury the conversions.
+    #[test]
+    fn several_paths_at_once_keep_only_the_audio() {
+        let dir = scratch("collect-glob");
+        let expanded: Vec<_> = ["a.wav", "b.flac", "cover.jpg", "playlist.m3u", "notes.txt"]
+            .iter()
+            .map(|name| {
+                let path = dir.join(name);
+                std::fs::write(&path, b"").expect("write");
+                path
+            })
+            .collect();
+
+        let names: Vec<_> = collect_inputs(&expanded)
+            .iter()
+            .filter_map(|path| path.file_name())
+            .map(|name| name.to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(names, ["a.wav", "b.flac"]);
     }
 
     /// A profile carries limits with it and a format does not, so asking for
