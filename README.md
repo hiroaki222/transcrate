@@ -74,6 +74,19 @@ table says so rather than picking a side.
 - Profiles shared by the CLI and the GUI
 - A GUI for macOS and Windows, on the same core
 
+## Releases
+
+None yet. When they start:
+
+- **CLI** — a Homebrew tap and prebuilt binaries.
+- **GUI** — `.dmg` and `.msi`, unsigned. An Apple developer certificate costs
+  $99 a year, which is hard to justify before anyone is using this. macOS blocks
+  an unsigned app the first time it is opened, and Apple documents the way
+  through: [Open a Mac app from an unknown developer][unsigned-mac]. You do it
+  once. On Windows, SmartScreen asks for **More info → Run anyway**.
+
+[unsigned-mac]: https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac
+
 ## Licence
 
 [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), whichever you prefer.

@@ -74,6 +74,19 @@ DJ 機材は互いに仕様が食い違っていて, しかもその食い違い
 - CLI と GUI で共有するプロファイル
 - 同じコアの上に載る macOS / Windows 向け GUI
 
+## 配布について
+
+まだリリースはない. 始めたらこうなる.
+
+- **CLI** — Homebrew tap とビルド済みバイナリ.
+- **GUI** — `.dmg` と `.msi`. **署名はしない.** Apple の開発者証明書は年 $99
+  かかり, 使う人がいない段階で払う理由が薄い. 署名がないと macOS は初回起動を
+  ブロックするので, Apple の手順に従って開く:
+  [開発元が不明なMacアプリを開く][unsigned-mac]. **一度やれば次からは不要**.
+  Windows では SmartScreen が出るので **「詳細情報」→「実行」**.
+
+[unsigned-mac]: https://support.apple.com/ja-jp/guide/mac-help/mh40616/mac
+
 ## ライセンス
 
 [MIT](LICENSE-MIT) または [Apache-2.0](LICENSE-APACHE) の好きな方.
