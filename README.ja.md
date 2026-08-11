@@ -60,6 +60,23 @@ cargo run -p transcrate-cli -- check ~/Music/*.flac --device cdj-3000,xdj-rr
 
 1 つでも弾かれた場合は非ゼロで終了するので, スクリプトの判定に使える.
 
+### シェル補完
+
+```sh
+mkdir -p ~/.zfunc
+transcrate completions zsh > ~/.zfunc/_transcrate
+```
+
+`~/.zshrc` に以下を追加する:
+
+```sh
+fpath=("$HOME/.zfunc" $fpath)
+autoload -Uz compinit && compinit
+```
+
+`bash`, `fish`, `powershell`, `elvish` にも対応. 機種 ID も補完されるので,
+`--device <TAB>` で 10 機種が一覧される.
+
 テストと lint. CI で走るものと同じ:
 
 ```sh

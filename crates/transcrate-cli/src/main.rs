@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand};
+use clap::builder::PossibleValuesParser;
+use clap::{CommandFactory, Parser, Subcommand, ValueHint};
+use clap_complete::Shell;
 use transcrate_core::{
     AudioSpec, Codec, DEVICES, DeviceProfile, FileSystem, Issue, Support, by_id, check, probe,
 };
@@ -21,16 +23,32 @@ enum Command {
 
     /// Report which players will play the given files.
     Check {
-        #[arg(required = true, value_name = "FILE")]
+        #[arg(required = true, value_name = "FILE", value_hint = ValueHint::FilePath)]
         files: Vec<PathBuf>,
 
         /// Players to check against, comma-separated. Defaults to all of them.
-        #[arg(short = 'd', long = "device", value_name = "ID", value_delimiter = ',')]
+        #[arg(
+            short = 'd',
+            long = "device",
+            value_name = "ID",
+            value_delimiter = ',',
+            value_parser = PossibleValuesParser::new(DEVICES.iter().map(|player| player.id)),
+        )]
         devices: Vec<String>,
 
         /// The ffprobe binary to use.
-        #[arg(long, default_value = "ffprobe", value_name = "PATH")]
+        #[arg(long, default_value = "ffprobe", value_name = "PATH", value_hint = ValueHint::FilePath)]
         ffprobe: PathBuf,
+    },
+
+    /// Print a shell completion script.
+    ///
+    /// For zsh, write it somewhere on your fpath:
+    ///
+    ///     transcrate completions zsh > "${fpath[1]}/_transcrate"
+    Completions {
+        /// Shell to generate the script for.
+        shell: Shell,
     },
 }
 
@@ -45,7 +63,15 @@ fn main() -> ExitCode {
             devices,
             ffprobe,
         } => run_check(&files, &devices, &ffprobe),
+        Command::Completions { shell } => {
+            write_completions(shell, &mut std::io::stdout());
+            ExitCode::SUCCESS
+        }
     }
+}
+
+fn write_completions(shell: Shell, out: &mut impl std::io::Write) {
+    clap_complete::generate(shell, &mut Cli::command(), "transcrate", out);
 }
 
 /// Exits non-zero when any file fails to read or any named player rejects one,
@@ -241,6 +267,47 @@ fn describe(support: Support) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::CommandFactory;
+
+    /// clap's own check for a contradictory definition, which otherwise only
+    /// shows up as a panic at run time.
+    #[test]
+    fn the_cli_definition_is_internally_consistent() {
+        Cli::command().debug_assert();
+    }
+
+    /// Player ids exist to be offered, not memorised. Registering them as
+    /// possible values gets them into the shell completion and lets clap reject
+    /// a typo before any file is opened.
+    #[test]
+    fn player_ids_are_offered_as_completions() {
+        let command = Cli::command();
+        let check = command.find_subcommand("check").expect("check subcommand");
+        let device = check
+            .get_arguments()
+            .find(|arg| arg.get_id() == "devices")
+            .expect("device argument");
+
+        let offered: Vec<_> = device
+            .get_possible_values()
+            .iter()
+            .map(|value| value.get_name().to_owned())
+            .collect();
+
+        assert_eq!(offered.len(), DEVICES.len());
+        assert!(offered.contains(&"xdj-rr".to_owned()), "got: {offered:?}");
+    }
+
+    #[test]
+    fn a_completion_script_names_the_subcommands() {
+        let mut script = Vec::new();
+        write_completions(clap_complete::Shell::Zsh, &mut script);
+        let script = String::from_utf8(script).expect("utf8");
+
+        assert!(script.contains("transcrate"));
+        assert!(script.contains("check"));
+        assert!(script.contains("devices"));
+    }
 
     /// Checking against nothing in particular means checking against everything;
     /// asking "will this play?" without naming a player is the common case.
