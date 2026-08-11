@@ -1,0 +1,11 @@
+[package]
+name = "transcrate-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Conversion, metadata and device-compatibility logic shared by the Transcrate CLI and GUI"
+
+[dependencies]
+serde = { workspace = true }

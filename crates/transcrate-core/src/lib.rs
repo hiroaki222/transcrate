@@ -1,0 +1,11 @@
+//! Core logic shared by the Transcrate CLI and GUI.
+//!
+//! Everything that decides *what* to do lives here; the command line and the
+//! Tauri backend are thin shells over this crate. One implementation is what
+//! keeps the two front-ends from drifting apart.
+
+pub mod device;
+
+pub use device::{
+    by_id, Codec, DeviceProfile, FileSystem, FormatSupport, LossyLimits, Support, DEVICES,
+};

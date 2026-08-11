@@ -1,0 +1,17 @@
+[package]
+name = "transcrate-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Command-line interface for Transcrate"
+
+[[bin]]
+name = "transcrate"
+path = "src/main.rs"
+
+[dependencies]
+transcrate-core = { workspace = true }
+
+clap = { workspace = true }

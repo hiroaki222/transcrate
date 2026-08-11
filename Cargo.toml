@@ -1,0 +1,22 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/hiroaki222/transcrate"
+description = "Fast, DJ-oriented audio transcoder with CDJ/XDJ compatibility checking"
+
+[workspace.dependencies]
+transcrate-core = { path = "crates/transcrate-core" }
+
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
