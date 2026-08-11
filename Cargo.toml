@@ -5,7 +5,8 @@ members = ["crates/*"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+# 1.88 for let-chains, which keep the compatibility checks flat.
+rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/hiroaki222/transcrate"
 description = "Fast, DJ-oriented audio transcoder with CDJ/XDJ compatibility checking"

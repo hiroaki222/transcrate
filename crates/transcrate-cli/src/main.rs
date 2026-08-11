@@ -57,7 +57,7 @@ fn max_rate(device: &DeviceProfile, codec: Codec) -> String {
 }
 
 fn khz(hz: u32) -> String {
-    if hz % 1_000 == 0 {
+    if hz.is_multiple_of(1_000) {
         format!("{}k", hz / 1_000)
     } else {
         format!("{:.1}k", f64::from(hz) / 1_000.0)

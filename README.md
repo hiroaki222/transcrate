@@ -26,7 +26,7 @@ The compatibility table and the `devices` command. Conversion is not built yet.
 
 ## Requirements
 
-- Rust 1.85 or newer (edition 2024)
+- Rust 1.88 or newer
 
 ffmpeg is not required yet. Once conversion lands it will be invoked as a
 separate process, using a system installation when one is present and a bundled
