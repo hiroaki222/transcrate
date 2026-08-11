@@ -199,7 +199,7 @@ fn run_convert(
 
     // Plan everything before encoding anything, so a file that cannot be read
     // is named straight away rather than after minutes of work on the rest.
-    let inputs = collect_inputs(files);
+    let inputs = collect_inputs(files, PreviousOutput::Skip);
     if inputs.is_empty() {
         eprintln!("no audio files among the paths given");
         return ExitCode::FAILURE;
@@ -372,8 +372,19 @@ const fn extension_for(codec: Codec) -> &'static str {
 /// the shell completion. One list so the two cannot drift apart.
 const AUDIO_EXTENSIONS: [&str; 8] = ["wav", "flac", "aif", "aiff", "m4a", "mp3", "aac", "mp4"];
 
-/// Where converted files go, and therefore the one folder a sweep skips.
+/// Where converted files go.
 const OUTPUT_FOLDER: &str = "_transcrate";
+
+/// Whether a sweep descends into a previous run's output folder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PreviousOutput {
+    /// Converting: taking it back in would re-encode the last run's results,
+    /// and for a lossy format that means losing a little more each time.
+    Skip,
+    /// Checking: "did what I made come out playable" is the obvious question to
+    /// ask of a folder of conversions, so it has to be answerable.
+    Include,
+}
 
 /// Expand directories into the audio inside them, recursively.
 ///
@@ -382,13 +393,13 @@ const OUTPUT_FOLDER: &str = "_transcrate";
 /// the extension does. Several at once is almost always a glob the shell
 /// expanded, and a shell hands over the artwork and the playlists too — so
 /// there, only audio comes through.
-fn collect_inputs(paths: &[PathBuf]) -> Vec<PathBuf> {
+fn collect_inputs(paths: &[PathBuf], previous: PreviousOutput) -> Vec<PathBuf> {
     let expanded_by_the_shell = paths.len() > 1;
     let mut found = Vec::new();
 
     for path in paths {
         if path.is_dir() {
-            sweep(path, &mut found);
+            sweep(path, previous, &mut found);
         } else if !expanded_by_the_shell || is_audio(path) {
             found.push(path.clone());
         }
@@ -400,13 +411,12 @@ fn collect_inputs(paths: &[PathBuf]) -> Vec<PathBuf> {
     found
 }
 
-fn sweep(directory: &Path, into: &mut Vec<PathBuf>) {
-    // Converting a folder twice must not pick up the first run's output: for a
-    // lossy format that would re-encode it into itself.
-    if directory
+fn sweep(directory: &Path, previous: PreviousOutput, into: &mut Vec<PathBuf>) {
+    let is_previous_output = directory
         .file_name()
-        .is_some_and(|name| name == OUTPUT_FOLDER)
-    {
+        .is_some_and(|name| name == OUTPUT_FOLDER);
+
+    if is_previous_output && previous == PreviousOutput::Skip {
         return;
     }
 
@@ -417,7 +427,7 @@ fn sweep(directory: &Path, into: &mut Vec<PathBuf>) {
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            sweep(&path, into);
+            sweep(&path, previous, into);
         } else if is_audio(&path) {
             into.push(path);
         }
@@ -482,7 +492,7 @@ fn run_check(files: &[PathBuf], device_ids: &[String], ffprobe: &Path) -> ExitCo
         }
     };
 
-    let inputs = collect_inputs(files);
+    let inputs = collect_inputs(files, PreviousOutput::Include);
     if inputs.is_empty() {
         eprintln!("no audio files among the paths given");
         return ExitCode::FAILURE;
@@ -756,7 +766,7 @@ mod tests {
         std::fs::write(dir.join("cover.jpg"), b"").expect("write");
         std::fs::write(dir.join("notes.txt"), b"").expect("write");
 
-        let names: Vec<_> = collect_inputs(&[dir])
+        let names: Vec<_> = collect_inputs(&[dir], PreviousOutput::Skip)
             .iter()
             .filter_map(|path| path.file_name())
             .map(|name| name.to_string_lossy().into_owned())
@@ -765,22 +775,27 @@ mod tests {
         assert_eq!(names, ["a.wav", "b.flac"]);
     }
 
-    /// Converting a folder twice must not convert the first run's output. That
+    /// Converting a folder twice must not convert the first run's output: that
     /// would re-encode a lossy file into itself, losing a little more each time.
+    /// Checking one should look at it, though — "did what I made come out
+    /// playable" is the obvious question to ask of a folder of conversions.
     #[test]
-    fn the_output_folder_is_not_swept_back_up() {
-        let dir = scratch("collect-skips-output");
+    fn only_converting_skips_a_previous_runs_output() {
+        let dir = scratch("collect-previous-output");
         std::fs::create_dir_all(dir.join("_transcrate")).expect("subdir");
         std::fs::write(dir.join("track.wav"), b"").expect("write");
         std::fs::write(dir.join("_transcrate/track.mp3"), b"").expect("write");
 
-        let names: Vec<_> = collect_inputs(&[dir])
-            .iter()
-            .filter_map(|path| path.file_name())
-            .map(|name| name.to_string_lossy().into_owned())
-            .collect();
+        let names = |previous| {
+            collect_inputs(std::slice::from_ref(&dir), previous)
+                .iter()
+                .filter_map(|path| path.file_name())
+                .map(|name| name.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        };
 
-        assert_eq!(names, ["track.wav"]);
+        assert_eq!(names(PreviousOutput::Skip), ["track.wav"]);
+        assert_eq!(names(PreviousOutput::Include), ["track.mp3", "track.wav"]);
     }
 
     /// One path named on its own is taken at its word, whatever it is called.
@@ -792,7 +807,10 @@ mod tests {
         let odd = dir.join("no-extension");
         std::fs::write(&odd, b"").expect("write");
 
-        assert_eq!(collect_inputs(std::slice::from_ref(&odd)), vec![odd]);
+        assert_eq!(
+            collect_inputs(std::slice::from_ref(&odd), PreviousOutput::Skip),
+            vec![odd]
+        );
     }
 
     /// `transcrate convert *` is the obvious way to do a folder from the shell,
@@ -810,7 +828,7 @@ mod tests {
             })
             .collect();
 
-        let names: Vec<_> = collect_inputs(&expanded)
+        let names: Vec<_> = collect_inputs(&expanded, PreviousOutput::Skip)
             .iter()
             .filter_map(|path| path.file_name())
             .map(|name| name.to_string_lossy().into_owned())
