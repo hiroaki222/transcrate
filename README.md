@@ -39,8 +39,14 @@ CDJ-2000NXS2   2016     48k   48k    96k    96k    96k    96k  no
 Convert a folder. Needs ffmpeg on your PATH:
 
 ```sh
-cargo run -p transcrate-cli -- convert ~/Music/*.flac
+cargo run -p transcrate-cli -- convert ~/Music
 ```
+
+Point it at a folder and it sweeps the audio inside, subfolders and all, while
+leaving artwork and playlists alone. A previous run's `_transcrate` folder is
+skipped, so converting twice does not re-encode what came out the first time.
+Naming files directly works too, and a named file is taken as given whatever it
+is called.
 
 ```
 ~/Music/track.flac

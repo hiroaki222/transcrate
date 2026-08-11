@@ -37,8 +37,13 @@ CDJ-2000NXS2   2016     48k   48k    96k    96k    96k    96k  no
 フォルダごと変換する. ffmpeg が PATH に必要:
 
 ```sh
-cargo run -p transcrate-cli -- convert ~/Music/*.flac
+cargo run -p transcrate-cli -- convert ~/Music
 ```
+
+フォルダを指定すると, その中の音声ファイルをサブフォルダまで含めて拾う.
+ジャケット画像やプレイリストには触れない. 前回の実行で作られた `_transcrate`
+フォルダは除外されるので, 二度実行しても出力を再変換することはない. ファイルを
+個別に指定してもよく, その場合は拡張子に関係なくそのまま処理する.
 
 ```
 ~/Music/track.flac

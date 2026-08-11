@@ -12,9 +12,31 @@ use transcrate_core::{
     probe,
 };
 
-/// Fast, DJ-oriented audio transcoder built on ffmpeg.
+/// Shown under the top-level help. Someone reading `-h` for the first time
+/// wants a line they can paste, not a list of flags to assemble one from.
+const EXAMPLES: &str = "\
+Examples:
+  transcrate convert ~/Music/*.flac          Convert for any player (MP3 320 kbps)
+  transcrate convert track.wav --to aiff     Change format, keep rate and depth
+  transcrate convert ~/Music -p lossless     Lossless, still playable everywhere
+  transcrate check ~/Music/*.mp3             Ask which players will take them
+  transcrate check track.flac -d xdj-rr      Ask about one player
+  transcrate devices                         List the players checked against
+
+Converted files land in a _transcrate folder beside each input. The source is
+never written to.";
+
 #[derive(Debug, Parser)]
-#[command(name = "transcrate", version, about, long_about = None)]
+#[command(
+    name = "transcrate",
+    version,
+    about = "Convert tracks for your USB, and know they will play before you get to the club.",
+    long_about = "Convert tracks for your USB, and know they will play before you get to the club.\n\n\
+                  Transcrate converts audio with ffmpeg and checks the result against what CDJs and \
+                  XDJs actually accept: codecs, sample rates, bit depths and filesystems, taken from \
+                  the manufacturers' manuals.",
+    after_help = EXAMPLES,
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -26,7 +48,17 @@ enum Command {
     Devices,
 
     /// Report which players will play the given files.
+    ///
+    /// Reads each file's real format with ffprobe rather than trusting its
+    /// extension, then lists the players that accept it and the reason each of
+    /// the others does not. Exits non-zero if anything is rejected.
+    #[command(after_help = "\
+Examples:
+  transcrate check ~/Music/*.flac              Against every player
+  transcrate check track.wav -d cdj-3000       Against one
+  transcrate check ~/Music/* -d xdj-rr,xdj-xz  Against the gear at tonight's venue")]
     Check {
+        /// Files to inspect.
         #[arg(required = true, value_name = "FILE", value_hint = ValueHint::FilePath)]
         files: Vec<PathBuf>,
 
@@ -46,7 +78,23 @@ enum Command {
     },
 
     /// Convert files into a profile's format.
+    ///
+    /// A profile carries limits with it: cdj-safe fixes the rate at 44.1 kHz so
+    /// every player in the table accepts the result. Naming a format with --to
+    /// changes only the container and keeps the source's rate and depth, which
+    /// is a different question, so the two cannot be combined.
+    ///
+    /// Files already in the target format are copied rather than re-encoded.
+    /// Reducing bit depth adds dither; resampling does not.
+    #[command(after_help = "\
+Examples:
+  transcrate convert ~/Music/*.flac         MP3 320 kbps, plays anywhere
+  transcrate convert track.wav --to aiff    AIFF at the source's rate and depth
+  transcrate convert ~/Music -p archive     FLAC, nothing changed, for storage
+  transcrate convert ~/Music/* -o /Volumes/USB   Straight onto the stick
+  transcrate convert ~/Music/* -j 4         Leave some cores alone")]
     Convert {
+        /// Files to convert.
         #[arg(required = true, value_name = "FILE", value_hint = ValueHint::FilePath)]
         files: Vec<PathBuf>,
 
@@ -151,10 +199,11 @@ fn run_convert(
 
     // Plan everything before encoding anything, so a file that cannot be read
     // is named straight away rather than after minutes of work on the rest.
+    let inputs = collect_inputs(files);
     let mut planned = Vec::new();
     let mut all_done = true;
 
-    for input in files {
+    for input in &inputs {
         match prepare(&target, input, into, ffprobe) {
             Ok(job) => planned.push(job),
             Err(message) => {
@@ -314,24 +363,101 @@ const fn extension_for(codec: Codec) -> &'static str {
     }
 }
 
-/// The containers this program reads. `(#i)` makes the match case-insensitive,
-/// so a `.WAV` ripped years ago still shows up.
-const AUDIO_GLOB: &str = "(#i)*.(wav|flac|aif|aiff|m4a|mp3|aac|mp4)";
+/// The containers this program reads, used both to sweep a folder and to build
+/// the shell completion. One list so the two cannot drift apart.
+const AUDIO_EXTENSIONS: [&str; 8] = ["wav", "flac", "aif", "aiff", "m4a", "mp3", "aac", "mp4"];
+
+/// Where converted files go, and therefore the one folder a sweep skips.
+const OUTPUT_FOLDER: &str = "_transcrate";
+
+/// Expand directories into the audio inside them, recursively.
+///
+/// A named file is taken as given whatever it is called: the extension filter
+/// exists to keep artwork and sleeve notes out of a folder sweep, not to
+/// overrule someone who pointed at a specific file.
+fn collect_inputs(paths: &[PathBuf]) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+
+    for path in paths {
+        if path.is_dir() {
+            sweep(path, &mut found);
+        } else {
+            found.push(path.clone());
+        }
+    }
+
+    // read_dir returns entries in whatever order the filesystem holds them,
+    // which would make the report jump around between runs.
+    found.sort();
+    found
+}
+
+fn sweep(directory: &Path, into: &mut Vec<PathBuf>) {
+    // Converting a folder twice must not pick up the first run's output: for a
+    // lossy format that would re-encode it into itself.
+    if directory
+        .file_name()
+        .is_some_and(|name| name == OUTPUT_FOLDER)
+    {
+        return;
+    }
+
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            sweep(&path, into);
+        } else if is_audio(&path) {
+            into.push(path);
+        }
+    }
+}
+
+fn is_audio(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| {
+            AUDIO_EXTENSIONS
+                .iter()
+                .any(|known| known.eq_ignore_ascii_case(ext))
+        })
+}
+
+/// The zsh glob for the same set. `(#i)` makes it case-insensitive, so a `.WAV`
+/// ripped years ago still shows up.
+fn audio_glob() -> String {
+    format!("(#i)*.({})", AUDIO_EXTENSIONS.join("|"))
+}
 
 fn write_completions(shell: Shell, out: &mut impl std::io::Write) {
     let mut script = Vec::new();
     clap_complete::generate(shell, &mut Cli::command(), "transcrate", &mut script);
 
     // zsh's `_files -g` narrows the offer to audio while still listing
-    // directories, which is what makes it navigable. clap_complete has no way
-    // to express that, so the generated line is rewritten here. Only the
-    // positional argument is touched: --ffprobe names a binary.
+    // directories, which is what makes it navigable. clap_complete cannot
+    // express that, so the generated lines are rewritten here.
+    //
+    // Matched by position rather than by the whole line: clap builds the line
+    // from the argument's help text, so pinning the exact string would break
+    // silently the next time that wording changed. Only the positional
+    // arguments are touched — --ffmpeg and --ffprobe name binaries, and -o
+    // names a directory.
     if shell == Shell::Zsh {
-        let narrowed = String::from_utf8_lossy(&script).replace(
-            "'*::files:_files'",
-            &format!("'*::files:_files -g \"{AUDIO_GLOB}\"'"),
-        );
-        script = narrowed.into_bytes();
+        let glob = audio_glob();
+        let narrowed: Vec<_> = String::from_utf8_lossy(&script)
+            .lines()
+            .map(|line| {
+                if line.trim_start().starts_with("'*::files") {
+                    line.replace(":_files'", &format!(":_files -g \"{glob}\"'"))
+                } else {
+                    line.to_owned()
+                }
+            })
+            .collect();
+        script = narrowed.join("\n").into_bytes();
     }
 
     out.write_all(&script).expect("write completion script");
@@ -350,7 +476,7 @@ fn run_check(files: &[PathBuf], device_ids: &[String], ffprobe: &Path) -> ExitCo
 
     let mut all_clear = true;
 
-    for file in files {
+    for file in &collect_inputs(files) {
         match probe::run(ffprobe, file) {
             Ok(spec) => all_clear &= report(file, &spec, &players),
             Err(error) => {
@@ -569,12 +695,14 @@ mod tests {
         write_completions(clap_complete::Shell::Zsh, &mut script);
         let script = String::from_utf8(script).expect("utf8");
 
+        // check and convert each take files positionally.
+        let narrowed = script
+            .lines()
+            .filter(|line| line.contains("_files -g"))
+            .count();
+        assert_eq!(narrowed, 2, "expected both file arguments to be narrowed");
         assert!(
-            script.contains(&format!("'*::files:_files -g \"{AUDIO_GLOB}\"'")),
-            "positional file argument is not narrowed"
-        );
-        assert!(
-            script.contains("flac"),
+            script.contains(&audio_glob()),
             "audio glob missing from the script"
         );
 
@@ -594,6 +722,63 @@ mod tests {
         assert!(script.contains("transcrate"));
         assert!(script.contains("check"));
         assert!(script.contains("devices"));
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("transcrate-cli-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create scratch dir");
+        dir
+    }
+
+    /// Pointing at a folder is the common case — nobody wants to name four
+    /// hundred tracks, and a shell glob does not reach into subfolders.
+    #[test]
+    fn a_directory_expands_to_the_audio_inside_it() {
+        let dir = scratch("collect");
+        std::fs::create_dir_all(dir.join("sub")).expect("subdir");
+        std::fs::write(dir.join("a.wav"), b"").expect("write");
+        std::fs::write(dir.join("sub/b.flac"), b"").expect("write");
+        std::fs::write(dir.join("cover.jpg"), b"").expect("write");
+        std::fs::write(dir.join("notes.txt"), b"").expect("write");
+
+        let names: Vec<_> = collect_inputs(&[dir])
+            .iter()
+            .filter_map(|path| path.file_name())
+            .map(|name| name.to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(names, ["a.wav", "b.flac"]);
+    }
+
+    /// Converting a folder twice must not convert the first run's output. That
+    /// would re-encode a lossy file into itself, losing a little more each time.
+    #[test]
+    fn the_output_folder_is_not_swept_back_up() {
+        let dir = scratch("collect-skips-output");
+        std::fs::create_dir_all(dir.join("_transcrate")).expect("subdir");
+        std::fs::write(dir.join("track.wav"), b"").expect("write");
+        std::fs::write(dir.join("_transcrate/track.mp3"), b"").expect("write");
+
+        let names: Vec<_> = collect_inputs(&[dir])
+            .iter()
+            .filter_map(|path| path.file_name())
+            .map(|name| name.to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(names, ["track.wav"]);
+    }
+
+    /// A named file is taken as given, whatever it is called. The extension
+    /// filter exists to keep artwork out of a folder sweep, not to overrule
+    /// someone who pointed at a specific file.
+    #[test]
+    fn a_named_file_is_taken_as_given() {
+        let dir = scratch("collect-explicit");
+        let odd = dir.join("no-extension");
+        std::fs::write(&odd, b"").expect("write");
+
+        assert_eq!(collect_inputs(&[odd.clone()]), vec![odd]);
     }
 
     /// A profile carries limits with it and a format does not, so asking for
