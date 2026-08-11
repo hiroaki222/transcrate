@@ -778,7 +778,7 @@ mod tests {
         let odd = dir.join("no-extension");
         std::fs::write(&odd, b"").expect("write");
 
-        assert_eq!(collect_inputs(&[odd.clone()]), vec![odd]);
+        assert_eq!(collect_inputs(std::slice::from_ref(&odd)), vec![odd]);
     }
 
     /// A profile carries limits with it and a format does not, so asking for
