@@ -104,6 +104,40 @@ result if it is going to a gig.
 Reducing bit depth adds dither automatically. Resampling does not, because
 that is not what dither is for.
 
+### Tags and artwork
+
+Everything the source carried comes across, except `comment` and `lyrics-eng`.
+Those two are where shops and rippers leave their advertising, and a CDJ puts
+the comment in the browser right next to the title. Title, artist, album, genre,
+key and BPM are what the browser is for, so they stay.
+
+`--keep-comment` leaves the comment alone, for anyone who keeps their own cue
+notes or a Camelot key there. The lyrics go either way.
+
+Naming the format a file is already in rewrites the tags without re-encoding
+anything — the audio stream is copied across untouched, so a lossy file loses
+nothing to a change of text:
+
+```sh
+transcrate convert ~/Music --to mp3                            # clear the comment
+transcrate convert ~/Music --to mp3 --no-artwork --keep-comment  # drop the sleeve
+```
+
+```
+[1/1] track.mp3 -> _transcrate/track.mp3  (tags rewritten, audio untouched)
+```
+
+Embedded artwork rides along, labelled the way rekordbox and the CDJ browser
+expect to find it. `--no-artwork` drops it instead.
+
+Two details that are easy to lose:
+
+- **MP3 and AIFF are written as ID3v2.3**, not ffmpeg's default of 2.4. Players
+  are more consistent with 2.3.
+- **The AIFF muxer writes no ID3 chunk unless asked**, and the artwork goes with
+  it. AIFF's own chunks still carry the title and artist, so the loss shows up
+  as a missing sleeve rather than as an untagged file. That flag is set here.
+
 Ask what a file will play on. This one needs `ffprobe` on your PATH, which comes
 with ffmpeg:
 

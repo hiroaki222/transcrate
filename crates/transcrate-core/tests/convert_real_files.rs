@@ -12,7 +12,9 @@ use std::path::Path;
 use common::{encode, tools_available, workspace};
 use transcrate_core::compat::AudioSpec;
 use transcrate_core::device::Codec;
-use transcrate_core::plan::{self, Action, BitDepthPolicy, SampleRatePolicy, Target};
+use transcrate_core::plan::{
+    self, Action, Artwork, BitDepthPolicy, MetadataPolicy, SampleRatePolicy, Target,
+};
 use transcrate_core::{convert, probe};
 
 /// Convert `input` by `plan` and read back what landed on disk.
@@ -67,6 +69,7 @@ fn a_dithered_reduction_into_aiff_lands_at_the_planned_depth() {
             sample_rate: SampleRatePolicy::Preserve,
             bit_depth: BitDepthPolicy::Fixed(24),
             bitrate_kbps: None,
+            metadata: MetadataPolicy::DJ,
         },
     );
     assert_eq!(to_aiff.action, Action::Encode { dither: true });
@@ -209,7 +212,16 @@ fn a_copy_reproduces_the_source_byte_for_byte() {
     );
     let source = probe::run(Path::new("ffprobe"), &source_path).expect("probe source");
 
-    let copy = plan::plan(&source, &Target::CDJ_SAFE);
+    // Nothing to rewrite in the tags either, which is what leaves a plain copy
+    // as the right answer.
+    let target = Target {
+        metadata: MetadataPolicy {
+            clear: &[],
+            artwork: Artwork::Keep,
+        },
+        ..Target::CDJ_SAFE
+    };
+    let copy = plan::plan(&source, &target);
     assert_eq!(copy.action, Action::Copy);
 
     let output_path = dir.join("copied.mp3");
