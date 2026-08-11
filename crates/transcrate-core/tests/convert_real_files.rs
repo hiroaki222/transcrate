@@ -12,7 +12,9 @@ use std::path::Path;
 use common::{encode, tools_available, workspace};
 use transcrate_core::compat::AudioSpec;
 use transcrate_core::device::Codec;
-use transcrate_core::plan::{self, Action, BitDepthPolicy, SampleRatePolicy, Target};
+use transcrate_core::plan::{
+    self, Action, BitDepthPolicy, MetadataPolicy, SampleRatePolicy, Target,
+};
 use transcrate_core::{convert, probe};
 
 /// Convert `input` by `plan` and read back what landed on disk.
@@ -67,6 +69,7 @@ fn a_dithered_reduction_into_aiff_lands_at_the_planned_depth() {
             sample_rate: SampleRatePolicy::Preserve,
             bit_depth: BitDepthPolicy::Fixed(24),
             bitrate_kbps: None,
+            metadata: MetadataPolicy::DJ,
         },
     );
     assert_eq!(to_aiff.action, Action::Encode { dither: true });

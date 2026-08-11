@@ -6,7 +6,7 @@ use clap::builder::PossibleValuesParser;
 use clap::{CommandFactory, Parser, Subcommand, ValueHint};
 use clap_complete::Shell;
 use transcrate_core::convert::ConvertError;
-use transcrate_core::plan::{self, Action, Target};
+use transcrate_core::plan::{self, Action, Artwork, MetadataPolicy, Target};
 use transcrate_core::{
     AudioSpec, Codec, DEVICES, DeviceProfile, FileSystem, Issue, Support, by_id, check, convert,
     probe,
@@ -97,44 +97,7 @@ Examples:
   transcrate convert ~/Music -p archive     FLAC, nothing changed, for storage
   transcrate convert ~/Music/* -o /Volumes/USB   Straight onto the stick
   transcrate convert ~/Music/* -j 4         Leave some cores alone")]
-    Convert {
-        /// Files to convert.
-        #[arg(required = true, value_name = "FILE", value_hint = ValueHint::FilePath)]
-        files: Vec<PathBuf>,
-
-        /// Profile to convert into. Defaults to cdj-safe.
-        #[arg(
-            short,
-            long,
-            conflicts_with = "to",
-            value_parser = PossibleValuesParser::new(Target::NAMES),
-        )]
-        profile: Option<String>,
-
-        /// Convert into this format, keeping the source's rate and depth.
-        #[arg(
-            long,
-            value_name = "FORMAT",
-            value_parser = PossibleValuesParser::new(Target::FORMATS),
-        )]
-        to: Option<String>,
-
-        /// Where to write. Defaults to a `_transcrate` folder beside each input.
-        #[arg(short, long, value_name = "DIR", value_hint = ValueHint::DirPath)]
-        output: Option<PathBuf>,
-
-        /// How many files to convert at once. Defaults to one per core.
-        #[arg(short = 'j', long, value_name = "N")]
-        jobs: Option<usize>,
-
-        /// The ffmpeg binary to use.
-        #[arg(long, default_value = "ffmpeg", value_name = "PATH", value_hint = ValueHint::FilePath)]
-        ffmpeg: PathBuf,
-
-        /// The ffprobe binary to use.
-        #[arg(long, default_value = "ffprobe", value_name = "PATH", value_hint = ValueHint::FilePath)]
-        ffprobe: PathBuf,
-    },
+    Convert(ConvertArgs),
 
     /// Print a shell completion script.
     ///
@@ -145,6 +108,50 @@ Examples:
         /// Shell to generate the script for.
         shell: Shell,
     },
+}
+
+#[derive(Debug, clap::Args)]
+struct ConvertArgs {
+    /// Files to convert.
+    #[arg(required = true, value_name = "FILE", value_hint = ValueHint::FilePath)]
+    files: Vec<PathBuf>,
+
+    /// Profile to convert into. Defaults to cdj-safe.
+    #[arg(
+        short,
+        long,
+        conflicts_with = "to",
+        value_parser = PossibleValuesParser::new(Target::NAMES),
+    )]
+    profile: Option<String>,
+
+    /// Convert into this format, keeping the source's rate and depth.
+    #[arg(
+        long,
+        value_name = "FORMAT",
+        value_parser = PossibleValuesParser::new(Target::FORMATS),
+    )]
+    to: Option<String>,
+
+    /// Where to write. Defaults to a `_transcrate` folder beside each input.
+    #[arg(short, long, value_name = "DIR", value_hint = ValueHint::DirPath)]
+    output: Option<PathBuf>,
+
+    /// Drop embedded artwork instead of carrying it across.
+    #[arg(long)]
+    no_artwork: bool,
+
+    /// How many files to convert at once. Defaults to one per core.
+    #[arg(short = 'j', long, value_name = "N")]
+    jobs: Option<usize>,
+
+    /// The ffmpeg binary to use.
+    #[arg(long, default_value = "ffmpeg", value_name = "PATH", value_hint = ValueHint::FilePath)]
+    ffmpeg: PathBuf,
+
+    /// The ffprobe binary to use.
+    #[arg(long, default_value = "ffprobe", value_name = "PATH", value_hint = ValueHint::FilePath)]
+    ffprobe: PathBuf,
 }
 
 fn main() -> ExitCode {
@@ -159,23 +166,7 @@ fn main() -> ExitCode {
             failing,
             ffprobe,
         } => run_check(&files, &devices, failing, &ffprobe),
-        Command::Convert {
-            files,
-            profile,
-            to,
-            output,
-            jobs,
-            ffmpeg,
-            ffprobe,
-        } => run_convert(
-            &files,
-            profile.as_deref(),
-            to.as_deref(),
-            output.as_deref(),
-            jobs,
-            &ffmpeg,
-            &ffprobe,
-        ),
+        Command::Convert(args) => run_convert(&args),
         Command::Completions { shell } => {
             write_completions(shell, &mut std::io::stdout());
             ExitCode::SUCCESS
@@ -185,22 +176,33 @@ fn main() -> ExitCode {
 
 /// Exits non-zero if any file failed, so a partial run is visible to a script
 /// without reading the output.
-fn run_convert(
-    files: &[PathBuf],
-    profile: Option<&str>,
-    to: Option<&str>,
-    into: Option<&Path>,
-    concurrency: Option<usize>,
-    ffmpeg: &Path,
-    ffprobe: &Path,
-) -> ExitCode {
-    let target = match resolve_target(profile, to) {
+fn run_convert(args: &ConvertArgs) -> ExitCode {
+    let target = match resolve_target(args.profile.as_deref(), args.to.as_deref()) {
         Ok(target) => target,
         Err(message) => {
             eprintln!("{message}");
             return ExitCode::FAILURE;
         }
     };
+
+    let target = Target {
+        metadata: MetadataPolicy {
+            artwork: if args.no_artwork {
+                Artwork::Remove
+            } else {
+                target.metadata.artwork
+            },
+            ..target.metadata
+        },
+        ..target
+    };
+
+    let (files, into, ffmpeg, ffprobe) = (
+        &args.files,
+        args.output.as_deref(),
+        args.ffmpeg.as_path(),
+        args.ffprobe.as_path(),
+    );
 
     // Plan everything before encoding anything, so a file that cannot be read
     // is named straight away rather than after minutes of work on the rest.
@@ -229,7 +231,7 @@ fn run_convert(
     let results = convert::run_all(
         ffmpeg,
         &planned,
-        concurrency.unwrap_or_else(convert::default_concurrency),
+        args.jobs.unwrap_or_else(convert::default_concurrency),
         &|index, result| {
             let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
             report_one(finished, total, &planned[index], result);

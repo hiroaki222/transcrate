@@ -26,8 +26,38 @@ pub enum BitDepthPolicy {
     CapAt(u8),
 }
 
+/// What happens to embedded artwork.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Artwork {
+    /// Carry it across untouched, labelling the stream the way players expect.
+    Keep,
+    /// Leave it behind.
+    Remove,
+}
+
+/// What happens to the tags a file arrives with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct MetadataPolicy {
+    /// Tag fields to empty out. Everything else is carried across.
+    pub clear: &'static [&'static str],
+    pub artwork: Artwork,
+}
+
+impl MetadataPolicy {
+    /// Comment and lyrics go, everything else stays.
+    ///
+    /// Those two are where shops and rippers leave their advertising, and a CDJ
+    /// puts the comment in the browser right next to the title. The rest —
+    /// title, artist, album, genre, key, BPM — is what the browser is for.
+    pub const DJ: Self = Self {
+        clear: &["comment", "lyrics-eng"],
+        artwork: Artwork::Keep,
+    };
+}
+
 /// What to convert into.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct Target {
     pub codec: Codec,
     pub sample_rate: SampleRatePolicy,
@@ -35,6 +65,7 @@ pub struct Target {
     pub bit_depth: BitDepthPolicy,
     /// Ignored for lossless codecs.
     pub bitrate_kbps: Option<u16>,
+    pub metadata: MetadataPolicy,
 }
 
 impl Target {
@@ -44,6 +75,7 @@ impl Target {
         sample_rate: SampleRatePolicy::Fixed(44_100),
         bit_depth: BitDepthPolicy::Preserve,
         bitrate_kbps: Some(320),
+        metadata: MetadataPolicy::DJ,
     };
 
     /// Lossless, and still playable everywhere. AIFF rather than WAV because
@@ -55,6 +87,7 @@ impl Target {
         sample_rate: SampleRatePolicy::CapAt(48_000),
         bit_depth: BitDepthPolicy::CapAt(24),
         bitrate_kbps: None,
+        metadata: MetadataPolicy::DJ,
     };
 
     /// For the copy you keep rather than the one you play: FLAC at whatever the
@@ -64,6 +97,7 @@ impl Target {
         sample_rate: SampleRatePolicy::Preserve,
         bit_depth: BitDepthPolicy::Preserve,
         bitrate_kbps: None,
+        metadata: MetadataPolicy::DJ,
     };
 
     /// The built-in profiles, by the name used on the command line.
@@ -105,6 +139,7 @@ impl Target {
             // A lossy codec left without one encodes at ffmpeg's default, which
             // is far below anything worth playing out.
             bitrate_kbps: is_lossy(codec).then_some(320),
+            metadata: MetadataPolicy::DJ,
         })
     }
 }
@@ -126,6 +161,7 @@ pub enum Action {
 pub struct Plan {
     pub output: AudioSpec,
     pub action: Action,
+    pub metadata: MetadataPolicy,
 }
 
 /// Work out the output and how to reach it.
@@ -140,7 +176,11 @@ pub fn plan(source: &AudioSpec, target: &Target) -> Plan {
         }
     };
 
-    Plan { output, action }
+    Plan {
+        output,
+        action,
+        metadata: target.metadata,
+    }
 }
 
 /// The ffmpeg options that carry out an encode, to be placed after `-i INPUT`
@@ -151,6 +191,13 @@ pub fn plan(source: &AudioSpec, target: &Target) -> Plan {
 pub fn encode_args(plan: &Plan) -> Vec<String> {
     let output = &plan.output;
     let mut args = vec!["-map".to_owned(), "0:a:0".to_owned()];
+
+    if plan.metadata.artwork == Artwork::Keep {
+        // The `?` is what lets one set of arguments suit a file with artwork
+        // and a file without: without it, a track with no sleeve is an error.
+        args.push("-map".to_owned());
+        args.push("0:v?".to_owned());
+    }
 
     args.push("-c:a".to_owned());
     args.push(encoder_name(output));
@@ -171,6 +218,8 @@ pub fn encode_args(plan: &Plan) -> Vec<String> {
         args.push("aresample=dither_method=triangular_hp".to_owned());
     }
 
+    args.extend(metadata_args(plan.metadata, output.codec));
+
     // One thread per encode: see the test for why the parallelism lives above.
     args.push("-threads".to_owned());
     args.push("1".to_owned());
@@ -178,6 +227,55 @@ pub fn encode_args(plan: &Plan) -> Vec<String> {
     args.push("-nostats".to_owned());
     args.push("-progress".to_owned());
     args.push("pipe:1".to_owned());
+
+    args
+}
+
+/// Tag handling: which fields to empty, what to do with the artwork, and which
+/// ID3 version to write where that means anything.
+fn metadata_args(policy: MetadataPolicy, codec: Codec) -> Vec<String> {
+    // Everything the source carried comes across; the clears below then remove
+    // what was asked for.
+    let mut args = vec!["-map_metadata".to_owned(), "0".to_owned()];
+
+    for field in policy.clear {
+        args.push("-metadata".to_owned());
+        args.push(format!("{field}="));
+    }
+
+    if policy.artwork == Artwork::Keep {
+        // Copied rather than re-encoded: nothing here improves a JPEG.
+        args.push("-c:v".to_owned());
+        args.push("copy".to_owned());
+        // Without the disposition a player treats the picture as a video track
+        // rather than a sleeve, and these two stream tags are what rekordbox
+        // and the CDJ browser read to place it.
+        args.push("-disposition:v".to_owned());
+        args.push("attached_pic".to_owned());
+        args.push("-metadata:s:v".to_owned());
+        args.push("title=Album cover".to_owned());
+        args.push("-metadata:s:v".to_owned());
+        args.push("comment=Cover (front)".to_owned());
+    }
+
+    match codec {
+        // The AIFF muxer writes no ID3 chunk unless asked, and the artwork goes
+        // with it. AIFF's own chunks still carry the title and artist, so the
+        // loss shows up as a missing sleeve rather than as an untagged file.
+        Codec::PcmAiff => {
+            args.push("-write_id3v2".to_owned());
+            args.push("1".to_owned());
+        }
+        Codec::Mp3 => {}
+        // FLAC has Vorbis comments, M4A has iTunes atoms, WAV has neither worth
+        // relying on. An ID3 flag would be noise.
+        _ => return args,
+    }
+
+    // ffmpeg writes 2.4 unless told otherwise, and players are more consistent
+    // with 2.3.
+    args.push("-id3v2_version".to_owned());
+    args.push("3".to_owned());
 
     args
 }
@@ -257,6 +355,7 @@ mod tests {
             sample_rate: SampleRatePolicy::Preserve,
             bit_depth: BitDepthPolicy::Fixed(bits),
             bitrate_kbps: None,
+            metadata: MetadataPolicy::DJ,
         }
     }
 
@@ -431,12 +530,18 @@ mod tests {
             sample_rate: SampleRatePolicy::CapAt(48_000),
             bit_depth: BitDepthPolicy::Preserve,
             bitrate_kbps: None,
+            metadata: MetadataPolicy::DJ,
         };
         let plan = plan(&wav(96_000, 24), &target);
 
         assert_eq!(plan.output.sample_rate_hz, 48_000);
         assert_eq!(plan.output.bit_depth, Some(24));
         assert_eq!(plan.action, Action::Encode { dither: false });
+    }
+
+    fn pairs_contain(args: &[String], flag: &str, value: &str) -> bool {
+        args.windows(2)
+            .any(|pair| pair[0] == flag && pair[1] == value)
     }
 
     fn pair(args: &[String], flag: &str) -> Option<String> {
@@ -463,11 +568,95 @@ mod tests {
                 sample_rate: SampleRatePolicy::Preserve,
                 bit_depth: BitDepthPolicy::Fixed(16),
                 bitrate_kbps: None,
+                metadata: MetadataPolicy::DJ,
             },
         );
         assert_eq!(
             pair(&encode_args(&to_wav), "-c:a").as_deref(),
             Some("pcm_s16le")
+        );
+    }
+
+    fn flac_source() -> AudioSpec {
+        AudioSpec {
+            codec: Codec::Flac,
+            sample_rate_hz: 96_000,
+            bit_depth: Some(24),
+            bitrate_kbps: None,
+        }
+    }
+
+    /// Artwork rides along. A track with no sleeve looks broken in a player's
+    /// browser, and dropping it silently is worse than not carrying it at all.
+    ///
+    /// `0:v?` is what makes this work without asking first: the `?` means "if
+    /// there is one", so the same arguments suit a file with artwork and a file
+    /// without.
+    #[test]
+    fn artwork_is_carried_across_with_its_stream_tags_set() {
+        let args = encode_args(&plan(&flac_source(), &Target::CDJ_SAFE));
+
+        assert!(pairs_contain(&args, "-map", "0:v?"), "{args:?}");
+        assert!(pairs_contain(&args, "-c:v", "copy"), "{args:?}");
+        assert!(
+            args.iter().any(|arg| arg.contains("Album cover")),
+            "artwork stream is not labelled: {args:?}"
+        );
+    }
+
+    /// Shops and rippers leave their advertising in the comment, and a CDJ
+    /// shows it in the browser next to the title.
+    #[test]
+    fn the_listed_tag_fields_are_emptied() {
+        let args = encode_args(&plan(&flac_source(), &Target::CDJ_SAFE));
+
+        assert!(pairs_contain(&args, "-metadata", "comment="), "{args:?}");
+        assert!(pairs_contain(&args, "-metadata", "lyrics-eng="), "{args:?}");
+    }
+
+    /// ffmpeg writes ID3v2.4 unless told otherwise, and players are more
+    /// consistent with 2.3.
+    #[test]
+    fn mp3_is_tagged_as_id3v2_3() {
+        let args = encode_args(&plan(&flac_source(), &Target::CDJ_SAFE));
+        assert!(pairs_contain(&args, "-id3v2_version", "3"), "{args:?}");
+    }
+
+    /// The AIFF muxer writes no ID3 at all unless asked, which takes the
+    /// artwork down with it — the tags survive in AIFF's own chunks, so the
+    /// loss is easy to miss.
+    #[test]
+    fn aiff_is_told_to_write_id3_in_the_first_place() {
+        let args = encode_args(&plan(&flac_source(), &Target::LOSSLESS));
+
+        assert!(pairs_contain(&args, "-write_id3v2", "1"), "{args:?}");
+        assert!(pairs_contain(&args, "-id3v2_version", "3"), "{args:?}");
+    }
+
+    /// FLAC carries Vorbis comments, so an ID3 flag there is noise at best.
+    #[test]
+    fn formats_without_id3_are_not_told_about_it() {
+        let args = encode_args(&plan(&flac_source(), &Target::ARCHIVE));
+        assert!(!args.iter().any(|arg| arg.contains("id3")), "{args:?}");
+    }
+
+    /// Dropping artwork means not mapping the stream. Leaving it mapped and
+    /// merely untagged would still carry the picture.
+    #[test]
+    fn removing_artwork_leaves_the_stream_unmapped() {
+        let target = Target {
+            metadata: MetadataPolicy {
+                artwork: Artwork::Remove,
+                ..Target::CDJ_SAFE.metadata
+            },
+            ..Target::CDJ_SAFE
+        };
+        let args = encode_args(&plan(&flac_source(), &target));
+
+        assert!(!args.iter().any(|arg| arg == "0:v?"), "{args:?}");
+        assert!(
+            !args.iter().any(|arg| arg.contains("Album cover")),
+            "{args:?}"
         );
     }
 
@@ -528,6 +717,7 @@ mod tests {
             sample_rate: SampleRatePolicy::CapAt(48_000),
             bit_depth: BitDepthPolicy::Preserve,
             bitrate_kbps: None,
+            metadata: MetadataPolicy::DJ,
         };
         let plan = plan(&wav(44_100, 24), &target);
 
