@@ -45,6 +45,39 @@ impl Target {
         bit_depth: BitDepthPolicy::Preserve,
         bitrate_kbps: Some(320),
     };
+
+    /// Lossless, and still playable everywhere. AIFF rather than WAV because
+    /// WAV's tagging is a mess that players disagree about; the ceilings are
+    /// the lowest any supported player accepts, so one file works on all of
+    /// them.
+    pub const LOSSLESS: Self = Self {
+        codec: Codec::PcmAiff,
+        sample_rate: SampleRatePolicy::CapAt(48_000),
+        bit_depth: BitDepthPolicy::CapAt(24),
+        bitrate_kbps: None,
+    };
+
+    /// For the copy you keep rather than the one you play: FLAC at whatever the
+    /// source was. Makes no promise about any player.
+    pub const ARCHIVE: Self = Self {
+        codec: Codec::Flac,
+        sample_rate: SampleRatePolicy::Preserve,
+        bit_depth: BitDepthPolicy::Preserve,
+        bitrate_kbps: None,
+    };
+
+    /// The built-in profiles, by the name used on the command line.
+    pub fn by_name(name: &str) -> Option<Self> {
+        match name {
+            "cdj-safe" => Some(Self::CDJ_SAFE),
+            "lossless" => Some(Self::LOSSLESS),
+            "archive" => Some(Self::ARCHIVE),
+            _ => None,
+        }
+    }
+
+    /// Every built-in profile name, for completion and error messages.
+    pub const NAMES: [&'static str; 3] = ["cdj-safe", "lossless", "archive"];
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -196,6 +229,66 @@ mod tests {
             bit_depth: BitDepthPolicy::Fixed(bits),
             bitrate_kbps: None,
         }
+    }
+
+    #[test]
+    fn the_built_in_profiles_resolve_by_name() {
+        assert_eq!(Target::by_name("cdj-safe"), Some(Target::CDJ_SAFE));
+        assert_eq!(
+            Target::by_name("lossless").map(|t| t.codec),
+            Some(Codec::PcmAiff)
+        );
+        assert_eq!(
+            Target::by_name("archive").map(|t| t.codec),
+            Some(Codec::Flac)
+        );
+        assert_eq!(Target::by_name("nope"), None);
+    }
+
+    /// A built-in profile that quietly produces something a player rejects
+    /// would be worse than having no profile at all. This holds the profiles
+    /// and the device table to each other: change either and this fails.
+    ///
+    /// `archive` is left out on purpose. It preserves the source for storage,
+    /// so it is the one profile not claiming to be booth-ready.
+    #[test]
+    fn the_booth_profiles_clear_every_player() {
+        let hi_res = AudioSpec {
+            codec: Codec::Flac,
+            sample_rate_hz: 96_000,
+            bit_depth: Some(24),
+            bitrate_kbps: None,
+        };
+
+        for name in ["cdj-safe", "lossless"] {
+            let target = Target::by_name(name).expect(name);
+            let output = plan(&hi_res, &target).output;
+
+            for device in crate::device::DEVICES {
+                let issues = crate::compat::check(&output, device);
+                assert!(
+                    issues.is_empty(),
+                    "{name} fails on {}: {issues:?}",
+                    device.id
+                );
+            }
+        }
+    }
+
+    /// Archive keeps what it was given, which is the point: it is for the copy
+    /// you keep, not the one you play.
+    #[test]
+    fn archive_preserves_the_source() {
+        let hi_res = AudioSpec {
+            codec: Codec::Flac,
+            sample_rate_hz: 96_000,
+            bit_depth: Some(24),
+            bitrate_kbps: None,
+        };
+        let output = plan(&hi_res, &Target::by_name("archive").expect("archive")).output;
+
+        assert_eq!(output.sample_rate_hz, 96_000);
+        assert_eq!(output.bit_depth, Some(24));
     }
 
     /// The fastest conversion is the one that does not happen. A library that

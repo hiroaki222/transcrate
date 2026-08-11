@@ -8,7 +8,7 @@ Transcrate は ffmpeg で音声を変換し, その結果を CDJ / XDJ が実際
 範囲と照合する. コーデック, サンプリングレート, ビット深度, ファイルシステム —
 すべてメーカーの説明書に基づく.
 
-**開発初期.** `devices` と `check` は動く. 変換機能はまだない.
+**開発初期. ただし変換は動く.** 並列実行, 進捗表示, メタデータ操作はこれから.
 
 ## ビルド
 
@@ -33,6 +33,36 @@ XDJ-XZ         2019     48k   48k    48k    48k    48k      -  sources disagree
 XDJ-RR         2018     48k   48k    48k    48k      -      -  no
 CDJ-2000NXS2   2016     48k   48k    96k    96k    96k    96k  no
 ```
+
+フォルダごと変換する. ffmpeg が PATH に必要:
+
+```sh
+cargo run -p transcrate-cli -- convert ~/Music/*.flac
+```
+
+```
+~/Music/track.flac
+  FLAC 96 kHz 24-bit -> MP3 44.1 kHz 320 kbps  (encoded)
+  ~/Music/_transcrate/track.mp3
+~/Music/already-fine.mp3
+  MP3 44.1 kHz 320 kbps -> MP3 44.1 kHz 320 kbps  (copied unchanged)
+  ~/Music/_transcrate/already-fine.mp3
+```
+
+出力は入力と同じ階層の `_transcrate` フォルダに置かれる. 元ファイルには一切
+書き込まない. 既に目的の形式になっているファイルは再エンコードせずコピーする.
+速いうえに, ロッシー音源を二度潰さずに済む.
+
+プロファイルは 3 つ. `-p` で選ぶ:
+
+| プロファイル | 出力 | 用途 |
+|---|---|---|
+| `cdj-safe` (既定) | MP3 320 kbps, 44.1 kHz | 対応表の全機種で再生できる |
+| `lossless` | AIFF, 最大 48 kHz / 24 bit | ロスレスかつ全機種で再生できる |
+| `archive` | FLAC, 元のレートと深度のまま | 再生用ではなく保管用 |
+
+ビット深度を下げるときは dither を自動で入れる. サンプリングレートの変更では
+入れない. dither はそのための処理ではないため.
 
 手持ちのファイルがどの機種で鳴るかを調べる. こちらは `ffprobe` が PATH に必要
 (ffmpeg に同梱されている):
