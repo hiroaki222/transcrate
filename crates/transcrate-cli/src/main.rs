@@ -48,14 +48,22 @@ enum Command {
         #[arg(required = true, value_name = "FILE", value_hint = ValueHint::FilePath)]
         files: Vec<PathBuf>,
 
-        /// Profile to convert into.
+        /// Profile to convert into. Defaults to cdj-safe.
         #[arg(
             short,
             long,
-            default_value = "cdj-safe",
+            conflicts_with = "to",
             value_parser = PossibleValuesParser::new(Target::NAMES),
         )]
-        profile: String,
+        profile: Option<String>,
+
+        /// Convert into this format, keeping the source's rate and depth.
+        #[arg(
+            long,
+            value_name = "FORMAT",
+            value_parser = PossibleValuesParser::new(Target::FORMATS),
+        )]
+        to: Option<String>,
 
         /// Where to write. Defaults to a `_transcrate` folder beside each input.
         #[arg(short, long, value_name = "DIR", value_hint = ValueHint::DirPath)]
@@ -95,10 +103,18 @@ fn main() -> ExitCode {
         Command::Convert {
             files,
             profile,
+            to,
             output,
             ffmpeg,
             ffprobe,
-        } => run_convert(&files, &profile, output.as_deref(), &ffmpeg, &ffprobe),
+        } => run_convert(
+            &files,
+            profile.as_deref(),
+            to.as_deref(),
+            output.as_deref(),
+            &ffmpeg,
+            &ffprobe,
+        ),
         Command::Completions { shell } => {
             write_completions(shell, &mut std::io::stdout());
             ExitCode::SUCCESS
@@ -110,17 +126,18 @@ fn main() -> ExitCode {
 /// without reading the output.
 fn run_convert(
     files: &[PathBuf],
-    profile: &str,
+    profile: Option<&str>,
+    to: Option<&str>,
     into: Option<&Path>,
     ffmpeg: &Path,
     ffprobe: &Path,
 ) -> ExitCode {
-    let Some(target) = Target::by_name(profile) else {
-        eprintln!(
-            "unknown profile: {profile}. Try one of: {}",
-            Target::NAMES.join(", ")
-        );
-        return ExitCode::FAILURE;
+    let target = match resolve_target(profile, to) {
+        Ok(target) => target,
+        Err(message) => {
+            eprintln!("{message}");
+            return ExitCode::FAILURE;
+        }
     };
 
     let mut all_done = true;
@@ -175,6 +192,28 @@ fn convert_one(
         describe_spec(&plan.output),
         destination.display()
     ))
+}
+
+/// Work out what to convert into.
+///
+/// clap rules out naming both, so this only has to decide between one, the
+/// other, and neither.
+fn resolve_target(profile: Option<&str>, to: Option<&str>) -> Result<Target, String> {
+    match (profile, to) {
+        (Some(name), _) => Target::by_name(name).ok_or_else(|| {
+            format!(
+                "unknown profile: {name}. Try one of: {}",
+                Target::NAMES.join(", ")
+            )
+        }),
+        (None, Some(format)) => Target::from_format(format).ok_or_else(|| {
+            format!(
+                "unknown format: {format}. Try one of: {}",
+                Target::FORMATS.join(", ")
+            )
+        }),
+        (None, None) => Ok(Target::CDJ_SAFE),
+    }
 }
 
 /// Where a converted file lands.
@@ -495,6 +534,40 @@ mod tests {
         assert!(script.contains("transcrate"));
         assert!(script.contains("check"));
         assert!(script.contains("devices"));
+    }
+
+    /// A profile carries limits with it and a format does not, so asking for
+    /// both is ambiguous rather than additive.
+    #[test]
+    fn a_profile_and_a_format_cannot_both_be_given() {
+        let both = Cli::try_parse_from([
+            "transcrate",
+            "convert",
+            "track.wav",
+            "-p",
+            "cdj-safe",
+            "--to",
+            "aiff",
+        ]);
+        assert!(both.is_err(), "clap accepted both at once");
+
+        let format_only =
+            Cli::try_parse_from(["transcrate", "convert", "track.wav", "--to", "aiff"]);
+        assert!(format_only.is_ok(), "{:?}", format_only.err());
+    }
+
+    #[test]
+    fn naming_neither_falls_back_to_the_default_profile() {
+        assert_eq!(
+            resolve_target(None, None).expect("default"),
+            Target::CDJ_SAFE
+        );
+    }
+
+    #[test]
+    fn a_format_resolves_to_a_target_that_changes_nothing_else() {
+        let target = resolve_target(None, Some("aiff")).expect("aiff");
+        assert_eq!(target, Target::from_format("aiff").expect("aiff"));
     }
 
     /// Conversions land beside the source rather than in the working directory,

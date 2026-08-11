@@ -78,6 +78,35 @@ impl Target {
 
     /// Every built-in profile name, for completion and error messages.
     pub const NAMES: [&'static str; 3] = ["cdj-safe", "lossless", "archive"];
+
+    /// Format names accepted where a container is named directly.
+    pub const FORMATS: [&'static str; 6] = ["mp3", "aac", "alac", "flac", "wav", "aiff"];
+
+    /// A target that changes the format and nothing else.
+    ///
+    /// Where a profile carries limits with it, this keeps the source's rate and
+    /// depth. Naming a format is for "put this in AIFF", not "make this safe",
+    /// and the two want different answers.
+    pub fn from_format(format: &str) -> Option<Self> {
+        let codec = match format {
+            "mp3" => Codec::Mp3,
+            "aac" => Codec::AacLc,
+            "alac" => Codec::Alac,
+            "flac" => Codec::Flac,
+            "wav" => Codec::PcmWav,
+            "aiff" => Codec::PcmAiff,
+            _ => return None,
+        };
+
+        Some(Self {
+            codec,
+            sample_rate: SampleRatePolicy::Preserve,
+            bit_depth: BitDepthPolicy::Preserve,
+            // A lossy codec left without one encodes at ffmpeg's default, which
+            // is far below anything worth playing out.
+            bitrate_kbps: is_lossy(codec).then_some(320),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -229,6 +258,53 @@ mod tests {
             bit_depth: BitDepthPolicy::Fixed(bits),
             bitrate_kbps: None,
         }
+    }
+
+    /// Naming a format alone means "this container, nothing else changed".
+    /// A profile carries limits with it; this does not, which is the point of
+    /// having both.
+    #[test]
+    fn a_format_alone_keeps_the_source_rate_and_depth() {
+        let hi_res = AudioSpec {
+            codec: Codec::Flac,
+            sample_rate_hz: 96_000,
+            bit_depth: Some(24),
+            bitrate_kbps: None,
+        };
+        let output = plan(&hi_res, &Target::from_format("aiff").expect("aiff")).output;
+
+        assert_eq!(output.codec, Codec::PcmAiff);
+        assert_eq!(output.sample_rate_hz, 96_000);
+        assert_eq!(output.bit_depth, Some(24));
+    }
+
+    /// A lossy format has to arrive with a bitrate or ffmpeg picks its own,
+    /// which is far below anything worth playing out.
+    #[test]
+    fn a_lossy_format_arrives_with_a_bitrate() {
+        assert_eq!(
+            Target::from_format("mp3").and_then(|t| t.bitrate_kbps),
+            Some(320)
+        );
+        assert_eq!(
+            Target::from_format("aac").and_then(|t| t.bitrate_kbps),
+            Some(320)
+        );
+        assert_eq!(
+            Target::from_format("flac").and_then(|t| t.bitrate_kbps),
+            None
+        );
+    }
+
+    #[test]
+    fn every_listed_format_resolves() {
+        for name in Target::FORMATS {
+            assert!(
+                Target::from_format(name).is_some(),
+                "{name} is listed but unknown"
+            );
+        }
+        assert_eq!(Target::from_format("ogg"), None);
     }
 
     #[test]

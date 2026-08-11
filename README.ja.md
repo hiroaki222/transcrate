@@ -61,6 +61,17 @@ cargo run -p transcrate-cli -- convert ~/Music/*.flac
 | `lossless` | AIFF, 最大 48 kHz / 24 bit | ロスレスかつ全機種で再生できる |
 | `archive` | FLAC, 元のレートと深度のまま | 再生用ではなく保管用 |
 
+形式だけを直接指定することもできる. この場合はコンテナだけが変わり, 元の
+サンプリングレートとビット深度はそのまま残る:
+
+```sh
+cargo run -p transcrate-cli -- convert ~/Music/track.flac --to aiff
+```
+
+指定できるのは `mp3`, `aac`, `alac`, `flac`, `wav`, `aiff`. プロファイルと
+違って上限を持たないため, 96 kHz の音源は 96 kHz のまま出力される. 現場に
+持っていくなら, 出力を `check` にかけて確認すること.
+
 ビット深度を下げるときは dither を自動で入れる. サンプリングレートの変更では
 入れない. dither はそのための処理ではないため.
 

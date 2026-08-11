@@ -63,6 +63,17 @@ Three profiles, chosen with `-p`:
 | `lossless` | AIFF, up to 48 kHz / 24-bit | Lossless and still playable everywhere |
 | `archive` | FLAC, source rate and depth | The copy you keep, not the one you play |
 
+Or name a format directly. That changes the container and nothing else, keeping
+the source's rate and depth:
+
+```sh
+cargo run -p transcrate-cli -- convert ~/Music/track.flac --to aiff
+```
+
+`mp3`, `aac`, `alac`, `flac`, `wav`, `aiff`. A profile carries limits with it
+and a format does not, so a 96 kHz source stays at 96 kHz — run `check` on the
+result if it is going to a gig.
+
 Reducing bit depth adds dither automatically. Resampling does not, because
 that is not what dither is for.
 
