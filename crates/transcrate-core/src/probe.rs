@@ -1,5 +1,8 @@
 //! Reading what a file actually contains, as opposed to what it is named.
 
+use std::path::Path;
+use std::process::Command;
+
 use serde::Deserialize;
 
 use crate::compat::AudioSpec;
@@ -7,6 +10,13 @@ use crate::device::Codec;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProbeError {
+    #[error("could not run ffprobe: {source}")]
+    NotRunnable {
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("ffprobe could not read the file: {stderr}")]
+    Rejected { stderr: String },
     #[error("ffprobe did not return valid JSON: {0}")]
     Malformed(#[from] serde_json::Error),
     #[error("the file contains no audio stream")]
@@ -15,6 +25,46 @@ pub enum ProbeError {
     UnsupportedCodec(String),
     #[error("ffprobe reported an unreadable {field}: {value}")]
     UnreadableField { field: &'static str, value: String },
+}
+
+/// The invocation this module knows how to read.
+///
+/// ffprobe reports only what it is asked for, so this list and the fields the
+/// parser reads have to stay in step.
+const PROBE_ARGS: [&str; 8] = [
+    "-v",
+    "error",
+    "-select_streams",
+    "a:0",
+    "-show_entries",
+    "format=format_name:stream=codec_name,sample_rate,bits_per_raw_sample,bits_per_sample,bit_rate",
+    "-print_format",
+    "json",
+];
+
+/// Read `file` using the ffprobe binary at `ffprobe`.
+///
+/// The binary is passed in rather than looked up here, so the caller decides
+/// between a system installation and a bundled one.
+///
+/// # Errors
+///
+/// Fails when ffprobe cannot be started, rejects the file, or describes it in
+/// terms this program does not handle.
+pub fn run(ffprobe: &Path, file: &Path) -> Result<AudioSpec, ProbeError> {
+    let output = Command::new(ffprobe)
+        .args(PROBE_ARGS)
+        .arg(file)
+        .output()
+        .map_err(|source| ProbeError::NotRunnable { source })?;
+
+    if !output.status.success() {
+        return Err(ProbeError::Rejected {
+            stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        });
+    }
+
+    parse(&String::from_utf8_lossy(&output.stdout))
 }
 
 /// The subset of `ffprobe -print_format json` that says what a stream is.
@@ -185,6 +235,25 @@ mod tests {
             parse(WAV_FLOAT32_48K).expect("parse wav").codec,
             Codec::PcmWav
         );
+    }
+
+    /// The parser reads six fields, and ffprobe only reports what it is asked
+    /// for. Dropping one from the request would leave the parser reading a
+    /// field that is never there, which fails as a missing value rather than as
+    /// anything that points at this list.
+    #[test]
+    fn the_request_covers_every_field_the_parser_reads() {
+        let rendered = PROBE_ARGS.join(" ");
+        for field in [
+            "codec_name",
+            "sample_rate",
+            "bits_per_raw_sample",
+            "bits_per_sample",
+            "bit_rate",
+            "format_name",
+        ] {
+            assert!(rendered.contains(field), "PROBE_ARGS omits {field}");
+        }
     }
 
     /// Lossy files have a bitrate and no meaningful depth; ffprobe reports the
