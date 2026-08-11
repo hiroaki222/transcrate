@@ -61,6 +61,26 @@ cargo run -p transcrate-cli -- check ~/Music/*.flac --device cdj-3000,xdj-rr
 
 It exits non-zero if anything is rejected, so it can gate a script.
 
+### Shell completion
+
+```sh
+mkdir -p ~/.zfunc
+transcrate completions zsh > ~/.zfunc/_transcrate
+```
+
+Then, in `~/.zshrc`:
+
+```sh
+fpath=("$HOME/.zfunc" $fpath)
+autoload -Uz compinit && compinit
+```
+
+`bash`, `fish`, `powershell` and `elvish` work too. Player ids complete as well,
+so `--device <TAB>` lists all ten.
+
+Under zsh, file arguments offer audio files and directories only, so the folder
+of artwork and PDFs sitting next to your tracks stays out of the way.
+
 Tests and lints, the same three CI runs:
 
 ```sh
