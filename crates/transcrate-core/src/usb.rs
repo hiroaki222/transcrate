@@ -37,11 +37,11 @@ pub struct Drive {
 /// Returns `None` when nothing is mounted there, which on a Mac usually means
 /// the stick was ejected between plugging it in and asking about it.
 pub fn drive_at(path: &Path) -> Option<Drive> {
-    // Every path starts with `/`, so a mistyped one matches the root mount and
-    // would come back described as the machine's own disk.
-    if !path.exists() {
-        return None;
-    }
+    // Mount points are absolute, and what someone types rarely is: `KOMORI`
+    // from inside /Volumes, a `..`, a symlink. Resolving first also rules out
+    // a path that is not there — without that, every mistyped name matches the
+    // root mount and comes back described as the machine's own disk.
+    let path = without_verbatim_prefix(path.canonicalize().ok()?);
 
     let disks = sysinfo::Disks::new_with_refreshed_list();
 
@@ -78,6 +78,22 @@ pub fn readers_of(filesystem: FileSystem, players: &'static [DeviceProfile]) -> 
         readable,
         unreadable,
     }
+}
+
+/// Drop the `\\?\` that Windows' `canonicalize` puts on the front.
+///
+/// Mount points there are reported as `C:\`, and a verbatim path never starts
+/// with one, so the two would never compare. Everywhere else this is the
+/// identity.
+fn without_verbatim_prefix(path: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    {
+        if let Some(stripped) = path.to_str().and_then(|text| text.strip_prefix(r"\\?\")) {
+            return PathBuf::from(stripped);
+        }
+    }
+
+    path
 }
 
 /// The filesystem family behind an operating system's name for it.
@@ -142,6 +158,36 @@ mod tests {
         );
 
         assert_eq!(drive_at(missing), None);
+    }
+
+    /// Mount points are always absolute, and a path typed at a shell is often
+    /// not: `transcrate usb KOMORI` from inside /Volumes is the obvious way to
+    /// ask, and comparing it against `/Volumes/KOMORI` unresolved finds
+    /// nothing.
+    #[test]
+    fn a_relative_path_still_finds_its_drive() {
+        // Tests run from the crate root, so this exists and is relative.
+        let relative = std::path::Path::new("src");
+        assert!(
+            relative.exists() && relative.is_relative(),
+            "the test needs a relative path that exists"
+        );
+
+        assert!(
+            drive_at(relative).is_some(),
+            "a relative path found no drive"
+        );
+    }
+
+    /// Windows canonicalises to `\\?\C:\…` while reporting mount points as
+    /// `C:\`, so the prefix has to come off or nothing ever matches.
+    #[cfg(windows)]
+    #[test]
+    fn a_verbatim_prefix_is_removed() {
+        assert_eq!(
+            without_verbatim_prefix(PathBuf::from(r"\\?\C:\Users")),
+            PathBuf::from(r"C:\Users")
+        );
     }
 
     /// The split is the whole point: which machines in the booth will read this
