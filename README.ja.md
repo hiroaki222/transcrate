@@ -11,7 +11,7 @@ Transcrate は ffmpeg で音声を変換し, その結果を CDJ / XDJ が実際
 [**最新版をダウンロード**](https://github.com/hiroaki222/transcrate/releases/latest)
 — Apple Silicon 向けの `.dmg` と Windows 向けの `.exe`. どちらも ffmpeg を同梱.
 
-![曲を並べて, どの機材で鳴るかを一覧している画面](docs/images/convert.png)
+![曲を並べて, どの機材で鳴るかを一覧している画面](docs/images/convert.ja.png)
 
 各曲に機材 10 台分のランプが並ぶ. 順序は常に同じ. 下の段は変換後の判定なので,
 赤い行が緑に変わることを実行前に確認できる. 再生できないランプには斜線が入って
@@ -38,7 +38,7 @@ macOS なら `.app`, Windows なら `.msi` ができる.
 - **USB CHECK** — 挿したメディアを指定すると, どの機材が読めるかを判定する.
   読み取り専用で, 初期化のボタンは置いていない.
 
-  ![挿したメディアを全機材と照合した画面](docs/images/usb-check.png)
+  ![挿したメディアを全機材と照合した画面](docs/images/usb-check.ja.png)
 
 - **DEVICES** — 対応表そのもの. 各機材の発売年を併記してある.
 
