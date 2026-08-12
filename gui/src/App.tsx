@@ -1,0 +1,392 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { open } from "@tauri-apps/plugin-dialog";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
+
+import type { DeviceRow, Outcome, Progress, ConvertOptions, Tools, Track } from "./api";
+import {
+  convertAll,
+  devices as loadDevices,
+  inspect,
+  locale as loadLocale,
+  tools as loadTools,
+} from "./api";
+import { DeviceTable } from "./components/DeviceTable";
+import { DevicePicker } from "./components/DevicePicker";
+import { DrivePanel } from "./components/DrivePanel";
+import { DropZone } from "./components/DropZone";
+import { SettingsButton } from "./components/SettingsButton";
+import { UtilityPanel } from "./components/UtilityPanel";
+import { TargetPicker } from "./components/TargetPicker";
+import { TrackRow } from "./components/TrackRow";
+import type { Choice } from "./strings";
+import { StringsProvider, buttons, resolve, useStrings } from "./strings";
+
+type Tab = "tracks" | "drive" | "devices" | "settings";
+
+/** Gear is fixed per venue, so the choice outlives the session. */
+const REMEMBERED = "transcrate.devices";
+
+const LANGUAGE = "transcrate.language";
+
+function remembered(): string[] | null {
+  try {
+    const saved = localStorage.getItem(REMEMBERED);
+    if (saved === null) return null;
+    const parsed: unknown = JSON.parse(saved);
+    return Array.isArray(parsed) ? (parsed as string[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function App() {
+  const [choice, setChoice] = useState<Choice>(
+    () => (localStorage.getItem(LANGUAGE) as Choice | null) ?? "auto",
+  );
+  const [machine, setMachine] = useState<string | null>(null);
+
+  useEffect(() => {
+    void loadLocale().then(setMachine);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(LANGUAGE, choice);
+  }, [choice]);
+
+  return (
+    <StringsProvider value={resolve(choice, machine)}>
+      <Window choice={choice} onChooseLanguage={setChoice} />
+    </StringsProvider>
+  );
+}
+
+type WindowProps = {
+  choice: Choice;
+  onChooseLanguage: (choice: Choice) => void;
+};
+
+function Window({ choice, onChooseLanguage }: WindowProps) {
+  const t = useStrings();
+
+  const [tab, setTab] = useState<Tab>("tracks");
+  const [profile, setProfile] = useState("cdj-safe");
+  // Kept by default: more people write their own cues and keys in the comment
+  // than are bothered by a shop's advertising, and losing notes is worse.
+  const [keepComment, setKeepComment] = useState(true);
+  const [artwork, setArtwork] = useState(true);
+  const [chosen, setChosen] = useState<string[]>([]);
+
+  const [dropped, setDropped] = useState<string[]>([]);
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [outcomes, setOutcomes] = useState<Outcome[] | null>(null);
+
+  const [busy, setBusy] = useState<"inspect" | "convert" | null>(null);
+  const [progress, setProgress] = useState<Progress | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  const [rows, setRows] = useState<DeviceRow[]>([]);
+  const [tools, setTools] = useState<Tools | null>(null);
+  const [hovering, setHovering] = useState(false);
+
+  const settings: ConvertOptions = useMemo(
+    () => ({ profile, keepComment, artwork, devices: chosen }),
+    [profile, keepComment, artwork, chosen],
+  );
+
+  useEffect(() => {
+    void loadDevices().then((loaded) => {
+      setRows(loaded);
+
+      // Only restore ids the table still has, in case a profile was dropped.
+      const all = loaded.map((row) => row.id);
+      const saved = remembered()?.filter((id) => all.includes(id)) ?? [];
+      setChosen(saved.length > 0 ? saved : all);
+    });
+
+    void loadTools().then(setTools);
+  }, []);
+
+  useEffect(() => {
+    if (chosen.length > 0) localStorage.setItem(REMEMBERED, JSON.stringify(chosen));
+  }, [chosen]);
+
+  useEffect(() => {
+    const listeners = [
+      listen<Progress>("inspect", (event) => setProgress(event.payload)),
+      listen<Progress>("convert", (event) => setProgress(event.payload)),
+    ];
+
+    return () => {
+      void Promise.all(listeners).then((offs) => offs.forEach((off) => off()));
+    };
+  }, []);
+
+  const examine = useCallback(
+    async (paths: string[]) => {
+      setDropped(paths);
+      setOutcomes(null);
+      setFailure(null);
+      setBusy("inspect");
+
+      try {
+        setTracks(await inspect(paths, settings));
+      } catch (error) {
+        setFailure(String(error));
+      } finally {
+        setBusy(null);
+        setProgress(null);
+      }
+    },
+    [settings],
+  );
+
+  useEffect(() => {
+    const listener = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === "over") setHovering(true);
+      else if (event.payload.type === "leave") setHovering(false);
+      else if (event.payload.type === "drop") {
+        setHovering(false);
+        setTab("tracks");
+        void examine(event.payload.paths);
+      }
+    });
+
+    return () => {
+      void listener.then((off) => off());
+    };
+  }, [examine]);
+
+  // Re-judge whatever is listed whenever the settings that decide it change.
+  useEffect(() => {
+    if (dropped.length > 0 && busy === null) void examine(dropped);
+    // examine changes on every settings change, so depending on it would loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, keepComment, artwork, chosen]);
+
+  async function choose() {
+    const picked = await open({ multiple: true, title: t.dialog.pickTracks });
+    if (picked === null) return;
+    await examine(Array.isArray(picked) ? picked : [picked]);
+  }
+
+  async function run() {
+    setBusy("convert");
+    setFailure(null);
+
+    try {
+      const done = await convertAll(dropped, settings);
+      setOutcomes(done);
+
+      // Show where it landed, rather than leaving people to hunt for it.
+      const landing = done.find((outcome) => outcome.error === null)?.outputPath;
+      if (landing !== undefined) await revealItemInDir(landing);
+
+      await examine(dropped);
+    } catch (error) {
+      setFailure(String(error));
+    } finally {
+      setBusy(null);
+      setProgress(null);
+    }
+  }
+
+  const failing = tracks.filter(
+    (track) => track.error !== null || track.now.some((lamp) => !lamp.ok),
+  ).length;
+
+  const converted = outcomes?.filter((outcome) => outcome.error === null).length ?? 0;
+
+  const landed =
+    outcomes?.find((outcome) => outcome.error === null)?.outputPath ?? null;
+  const missing = tools !== null && (!tools.ffmpeg || !tools.ffprobe);
+
+  const tabs: [Tab, string][] = [
+    ["tracks", buttons.tracks],
+    ["drive", buttons.drive],
+    ["devices", buttons.devices],
+  ];
+
+  return (
+    <div className="app" data-hovering={hovering ? "" : undefined}>
+      <header className="topbar">
+        <span className="lamp-bar" />
+        <span className="mark">TRANSCRATE</span>
+        <span className="push" />
+        {missing && <span className="modetag">{t.status.ffmpegMissing}</span>}
+        <SettingsButton
+          onOpen={() => setTab("settings")}
+          open={tab === "settings"}
+        />
+      </header>
+
+      <nav className="tabs">
+        {tabs.map(([id, label]) => (
+          <button
+            className="tab"
+            data-on={tab === id ? "" : undefined}
+            key={id}
+            onClick={() => setTab(id)}
+            type="button"
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {tab === "tracks" && (
+        <div className="pane">
+          <div className="bar">
+            <DevicePicker chosen={chosen} onChange={setChosen} rows={rows} />
+
+            <button
+              className="box-btn"
+              data-on={keepComment ? "" : undefined}
+              onClick={() => setKeepComment((on) => !on)}
+              type="button"
+            >
+              {t.toolbar.keepComment}
+            </button>
+            <button
+              className="box-btn"
+              data-on={artwork ? "" : undefined}
+              onClick={() => setArtwork((on) => !on)}
+              type="button"
+            >
+              {t.toolbar.keepArtwork}
+            </button>
+
+            <span className="push" />
+            <button
+              className="go-btn"
+              disabled={tracks.length === 0 || busy !== null}
+              onClick={run}
+              type="button"
+            >
+              {t.toolbar.convert(tracks.length)}
+            </button>
+          </div>
+
+          {failure !== null && <div className="failure">{failure}</div>}
+
+          {outcomes !== null && (
+            <div className="done">
+              <span className="done-mark" />
+              <span className="done-text">
+                {t.done.converted(converted)}
+                {outcomes.length > converted && (
+                  <span className="done-failed">
+                    {t.done.failed(outcomes.length - converted)}
+                  </span>
+                )}
+              </span>
+              <span className="push" />
+              {landed !== null && (
+                <button
+                  className="box-btn"
+                  onClick={() => void revealItemInDir(landed)}
+                  type="button"
+                >
+                  {t.done.reveal}
+                </button>
+              )}
+              <button
+                className="box-btn"
+                onClick={() => setOutcomes(null)}
+                type="button"
+              >
+                {t.done.dismiss}
+              </button>
+            </div>
+          )}
+
+          <TargetPicker onChange={setProfile} profile={profile} />
+
+          {tracks.length === 0 ? (
+            <DropZone hovering={hovering} onPick={choose} />
+          ) : (
+            <div className="rows">
+              {tracks.map((track, at) => (
+                <TrackRow
+                  index={at}
+                  key={track.path}
+                  onSelect={() =>
+                    setSelected((was) => (was === track.path ? null : track.path))
+                  }
+                  selected={selected === track.path}
+                  track={track}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "drive" && (
+        <DrivePanel
+          chosen={chosen}
+          onChooseDevices={setChosen}
+          rows={rows}
+          settings={settings}
+        />
+      )}
+      {tab === "devices" && <DeviceTable rows={rows} />}
+      {tab === "settings" && (
+        <UtilityPanel choice={choice} onChange={onChooseLanguage} />
+      )}
+
+      <footer className="deckbar" data-busy={busy !== null ? "" : undefined}>
+        {busy === null ? (
+          <>
+            <span className="cell">
+              <span className="cell-key">TRACKS</span>
+              <span className="cell-val">{tracks.length}</span>
+            </span>
+            <span className="cell">
+              <span className="cell-key">REJECTED</span>
+              <span className={failing > 0 ? "cell-val ng" : "cell-val"}>
+                {failing}
+              </span>
+            </span>
+            {outcomes !== null && (
+              <span className="cell">
+                <span className="cell-key">CONVERTED</span>
+                <span className="cell-val hot">
+                  {converted}
+                  <small> / {outcomes.length}</small>
+                </span>
+              </span>
+            )}
+          </>
+        ) : (
+          <>
+            <span className="cell">
+              <span className="cell-key">
+                {busy === "inspect" ? "READING" : "CONVERTING"}
+              </span>
+              <span className="cell-val">
+                {progress?.done ?? 0}
+                <small> / {progress?.total ?? 0}</small>
+              </span>
+            </span>
+            <span className="meter">
+              <i
+                style={{
+                  width:
+                    progress && progress.total > 0
+                      ? `${(progress.done / progress.total) * 100}%`
+                      : "0%",
+                }}
+              />
+            </span>
+            <span className="cell-name">{progress?.name ?? ""}</span>
+          </>
+        )}
+        <span className="push" />
+        <span className="modetag">{profile.toUpperCase()}</span>
+      </footer>
+    </div>
+  );
+}

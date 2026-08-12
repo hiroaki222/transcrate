@@ -45,23 +45,37 @@ pub struct MetadataPolicy {
 }
 
 impl MetadataPolicy {
-    /// Comment and lyrics go, everything else stays.
+    /// What a DJ wants: the lyrics go, everything else stays.
     ///
-    /// Those two are where shops and rippers leave their advertising, and a CDJ
-    /// puts the comment in the browser right next to the title. The rest —
-    /// title, artist, album, genre, key, BPM — is what the browser is for.
+    /// Lyrics are dead weight on a CDJ and are where rippers leave their
+    /// advertising. The comment stays, because that is where DJs put their own
+    /// cue notes and Camelot keys, and emptying it by default would throw away
+    /// work nobody can get back. Title, artist, album, genre, key and BPM are
+    /// what the browser is for, so they stay too.
     pub const DJ: Self = Self {
+        clear: &["lyrics-eng"],
+        artwork: Artwork::Keep,
+    };
+
+    /// For a library bought from shops that fill the comment with their own
+    /// advertising, which a CDJ then shows next to the title.
+    pub const CLEARING_COMMENTS: Self = Self {
         clear: &["comment", "lyrics-eng"],
         artwork: Artwork::Keep,
     };
 
-    /// The same, for people who keep their own cue notes or a Camelot key in
-    /// the comment. The lyrics still go: nobody reads those off a CDJ, and
-    /// they are the other thing shops fill in.
-    pub const KEEPING_COMMENTS: Self = Self {
-        clear: &["lyrics-eng"],
-        artwork: Artwork::Keep,
-    };
+    /// The same policy, but leaving the artwork behind.
+    ///
+    /// Kept as an operation on a policy rather than as four named constants,
+    /// because the artwork choice and the comment choice are independent and
+    /// naming every combination hides that.
+    #[must_use]
+    pub const fn without_artwork(self) -> Self {
+        Self {
+            artwork: Artwork::Remove,
+            ..self
+        }
+    }
 
     /// Whether applying this would change a file at all.
     ///
@@ -195,6 +209,10 @@ pub enum Action {
 /// What one file's conversion will produce, and how.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct Plan {
+    /// What the file is now. Carried along so that anything reporting a plan —
+    /// a line of terminal output, a row in a window — can say what changed
+    /// without probing the file a second time.
+    pub source: AudioSpec,
     pub output: AudioSpec,
     pub action: Action,
     pub metadata: MetadataPolicy,
@@ -215,6 +233,7 @@ pub fn plan(source: &AudioSpec, target: &Target) -> Plan {
     };
 
     Plan {
+        source: *source,
         output,
         action,
         metadata: target.metadata,
@@ -594,7 +613,7 @@ mod tests {
             pairs_contain(&args, "-c:a", "copy"),
             "audio should not be re-encoded to change a tag: {args:?}"
         );
-        assert!(pairs_contain(&args, "-metadata", "comment="), "{args:?}");
+        assert!(pairs_contain(&args, "-metadata", "lyrics-eng="), "{args:?}");
         // Re-encoding options make no sense against a stream copy.
         assert!(!args.iter().any(|arg| arg == "-b:a"), "{args:?}");
         assert!(!args.iter().any(|arg| arg == "-af"), "{args:?}");
@@ -736,33 +755,47 @@ mod tests {
         );
     }
 
-    /// Plenty of people keep their own cue notes or a Camelot key in the
-    /// comment, so emptying it has to be a choice rather than a rule. The
-    /// lyrics go either way — nobody reads those off a CDJ.
+    /// The artwork choice and the comment choice are independent, so dropping
+    /// a sleeve must not quietly change what happens to the text.
     #[test]
-    fn the_comment_can_be_kept() {
-        let kept = MetadataPolicy::KEEPING_COMMENTS;
-        assert!(!kept.clear.contains(&"comment"), "{:?}", kept.clear);
-        assert!(kept.clear.contains(&"lyrics-eng"), "{:?}", kept.clear);
+    fn removing_artwork_leaves_the_tag_fields_alone() {
+        let policy = MetadataPolicy::DJ;
+        let without = policy.without_artwork();
 
-        let target = Target {
-            metadata: kept,
-            ..Target::CDJ_SAFE
-        };
-        let args = encode_args(&plan(&flac_source(), &target));
+        assert_eq!(without.artwork, Artwork::Remove);
+        assert_eq!(without.clear, policy.clear);
+    }
+
+    /// Plenty of people keep their own cue notes or a Camelot key in the
+    /// comment, and losing those silently is worse than carrying a shop's
+    /// advertising across. The lyrics go either way — nobody reads those off
+    /// a CDJ.
+    #[test]
+    fn the_comment_survives_by_default() {
+        let policy = MetadataPolicy::DJ;
+        assert!(!policy.clear.contains(&"comment"), "{:?}", policy.clear);
+        assert!(policy.clear.contains(&"lyrics-eng"), "{:?}", policy.clear);
+
+        let args = encode_args(&plan(&flac_source(), &Target::CDJ_SAFE));
 
         assert!(!pairs_contain(&args, "-metadata", "comment="), "{args:?}");
         assert!(pairs_contain(&args, "-metadata", "lyrics-eng="), "{args:?}");
     }
 
-    /// Shops and rippers leave their advertising in the comment, and a CDJ
-    /// shows it in the browser next to the title.
+    /// For the other case: a library full of shop advertising, which a CDJ
+    /// shows in the browser right next to the title.
     #[test]
-    fn the_listed_tag_fields_are_emptied() {
-        let args = encode_args(&plan(&flac_source(), &Target::CDJ_SAFE));
+    fn the_comment_can_be_emptied_on_request() {
+        let policy = MetadataPolicy::CLEARING_COMMENTS;
+        assert!(policy.clear.contains(&"comment"), "{:?}", policy.clear);
+
+        let target = Target {
+            metadata: policy,
+            ..Target::CDJ_SAFE
+        };
+        let args = encode_args(&plan(&flac_source(), &target));
 
         assert!(pairs_contain(&args, "-metadata", "comment="), "{args:?}");
-        assert!(pairs_contain(&args, "-metadata", "lyrics-eng="), "{args:?}");
     }
 
     /// ffmpeg writes ID3v2.4 unless told otherwise, and players are more

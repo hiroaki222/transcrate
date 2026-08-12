@@ -15,7 +15,7 @@ use transcrate_core::device::Codec;
 use transcrate_core::plan::{
     self, Action, Artwork, BitDepthPolicy, MetadataPolicy, SampleRatePolicy, Target,
 };
-use transcrate_core::{convert, probe};
+use transcrate_core::{convert, files, probe};
 
 /// Convert `input` by `plan` and read back what landed on disk.
 fn convert_and_probe(plan: &plan::Plan, input: &Path, output: &Path) -> AudioSpec {
@@ -48,6 +48,51 @@ fn the_output_matches_what_the_plan_promised() {
     assert_eq!(produced.sample_rate_hz, 44_100);
     assert_eq!(produced.bitrate_kbps, to_mp3.output.bitrate_kbps);
     assert_eq!(produced.bit_depth, to_mp3.output.bit_depth);
+}
+
+/// Working out what would happen is the first thing a window does with a folder
+/// dropped on it, and someone who has not pressed convert yet should not find
+/// their library seeded with empty `_transcrate` folders.
+#[test]
+fn working_out_a_job_writes_nothing_to_disk() {
+    if !tools_available() {
+        return;
+    }
+
+    let dir = workspace("prepare-is-read-only");
+    let flac = encode(&dir, "track.flac", 44_100, &["-c:a", "flac"]);
+    let _ = std::fs::remove_dir_all(dir.join(files::OUTPUT_FOLDER));
+
+    let job = convert::prepare(&flac, None, Path::new("ffprobe"), &|_| Target::CDJ_SAFE)
+        .expect("prepare");
+
+    assert_eq!(job.output, dir.join(files::OUTPUT_FOLDER).join("track.mp3"));
+    assert!(
+        !dir.join(files::OUTPUT_FOLDER).exists(),
+        "preparing a job created the output folder"
+    );
+}
+
+/// Which leaves the run to make the folder, and it has to: every conversion
+/// lands somewhere that did not exist a moment ago.
+#[test]
+fn a_run_creates_the_folder_it_writes_into() {
+    if !tools_available() {
+        return;
+    }
+
+    let dir = workspace("run-creates-its-folder");
+    let flac = encode(&dir, "track.flac", 44_100, &["-c:a", "flac"]);
+
+    let missing = dir.join("not-there-yet");
+    let _ = std::fs::remove_dir_all(&missing);
+
+    let source = probe::run(Path::new("ffprobe"), &flac).expect("probe source");
+    let to_mp3 = plan::plan(&source, &Target::CDJ_SAFE);
+    let output = missing.join("track.mp3");
+
+    convert::run(Path::new("ffmpeg"), &to_mp3, &flac, &output).expect("convert");
+    assert!(output.exists(), "the output was not written");
 }
 
 /// The case the dither exists for, and the one where the encoder name has to be

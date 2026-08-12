@@ -9,10 +9,43 @@ Transcrate converts audio with ffmpeg and checks the result against what CDJs
 and XDJs actually accept: codecs, sample rates, bit depths and filesystems,
 taken from the manufacturers' manuals.
 
-**Status: early, but it converts.** Parallel jobs, progress reporting and
-metadata control are next.
+**Status: it works, and there is nothing to download yet.** Conversion, the
+per-player verdict, the drive check and the window are all in place; releases
+are not.
 
-## Build
+## The window
+
+For anyone who would rather not open a terminal. Same core, same table, same
+answers.
+
+```sh
+cd gui
+bun install
+bun run tauri dev
+```
+
+Needs [Bun](https://bun.sh) and ffmpeg on your PATH. `bun run tauri build`
+produces a `.app` on macOS and an `.msi` on Windows.
+
+Three screens:
+
+- **CONVERT** — drop tracks or a folder on the window. Each row says what the
+  file is, what it would become, and carries ten lamps: one per player, green
+  where it plays and hatched red where it will not. A second row of lamps shows
+  the verdict after conversion, so a red row can be seen turning green before
+  anything is committed to.
+- **USB CHECK** — point it at a drive and see which players will read it.
+  Read-only, and there is no format button.
+- **DEVICES** — the compatibility table itself, release year beside each player.
+
+The interface follows whatever language the machine is set to, Japanese or
+English, and can be pinned to either.
+
+Where official sources contradict each other the window takes the stricter
+reading, so the XDJ-XZ's disputed exFAT support shows as a plain no. A
+contradiction is not something anyone can settle in a booth.
+
+## Command line
 
 Needs Rust 1.88 or newer.
 
@@ -106,13 +139,14 @@ that is not what dither is for.
 
 ### Tags and artwork
 
-Everything the source carried comes across, except `comment` and `lyrics-eng`.
-Those two are where shops and rippers leave their advertising, and a CDJ puts
-the comment in the browser right next to the title. Title, artist, album, genre,
-key and BPM are what the browser is for, so they stay.
+Everything the source carried comes across, except `lyrics-eng`. Nobody reads
+lyrics off a CDJ, and it is where rippers leave their advertising. Title,
+artist, album, genre, key and BPM are what the browser is for, so they stay.
 
-`--keep-comment` leaves the comment alone, for anyone who keeps their own cue
-notes or a Camelot key there. The lyrics go either way.
+The comment stays too. Shops fill it with advertising and a CDJ shows it in the
+browser next to the title, which is an argument for clearing it — but it is
+also where DJs keep their own cue notes and Camelot keys, and those cannot be
+got back. `--clear-comment` empties it when you want that.
 
 ### Tidying tags without converting
 
@@ -131,11 +165,11 @@ to AIFF takes one command rather than one per extension. The audio stream is
 copied across untouched: a lossy file loses nothing to a change of text, and
 nothing is spent re-encoding audio that was already correct.
 
-`--no-artwork` and `--keep-comment` mean the same here as on `convert`:
+`--no-artwork` and `--clear-comment` mean the same here as on `convert`:
 
 ```sh
 transcrate retag ~/Music --no-artwork                 # drop every sleeve
-transcrate retag ~/Music --no-artwork --keep-comment  # sleeves out, notes stay
+transcrate retag ~/Music --no-artwork --clear-comment  # sleeves out, comments too
 ```
 
 Embedded artwork rides along, labelled the way rekordbox and the CDJ browser
@@ -288,23 +322,34 @@ table says so rather than picking a side.
 
 ## Roadmap
 
-- Convert between WAV, FLAC, AIFF, M4A and MP3
-- Warn per player, from the table above
+Working:
+
+- Convert between WAV, FLAC, AIFF, M4A and MP3, several at once
+- A verdict per player, from the table above
 - Check a USB stick. Read-only: it never writes to your drive
-- Keep, clear or overwrite metadata field by field
-- Profiles shared by the CLI and the GUI
-- A GUI for macOS and Windows, on the same core
+- Tags and artwork carried across, cleared or left alone
+- A window for macOS and Windows, on the same core as the command line
+
+Next:
+
+- Bundle ffmpeg, so nothing has to be installed before the app will run
+- Read a stick's contents, not only its filesystem
+- `--json`, so other programs can act on the verdicts
 
 ## Releases
 
-None yet. When they start:
+None cut yet, but tagging one builds and attaches:
 
-- **CLI** — a Homebrew tap and prebuilt binaries.
-- **GUI** — `.dmg` and `.msi`, unsigned. An Apple developer certificate costs
-  $99 a year, which is hard to justify before anyone is using this. macOS blocks
-  an unsigned app the first time it is opened, and Apple documents the way
-  through: [Open a Mac app from an unknown developer][unsigned-mac]. You do it
-  once. On Windows, SmartScreen asks for **More info → Run anyway**.
+- **The window** — a `.dmg` for Apple silicon and an `.msi` for Windows, each
+  carrying its own ffmpeg so nothing has to be installed first.
+- **The command line** — an archive per platform, holding one binary. This one
+  expects ffmpeg on your PATH.
+
+Both are unsigned. An Apple developer certificate costs $99 a year, which is
+hard to justify before anyone is using this. macOS blocks an unsigned app the
+first time it is opened, and Apple documents the way through: [Open a Mac app
+from an unknown developer][unsigned-mac]. You do it once. On Windows,
+SmartScreen asks for **More info → Run anyway**.
 
 [unsigned-mac]: https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac
 
@@ -312,6 +357,16 @@ None yet. When they start:
 
 [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), whichever you prefer.
 
-ffmpeg runs as a separate process and is not linked into this program. Released
-builds bundle an LGPL build of it, and prefer a system install when there is
-one.
+ffmpeg runs as a separate process and is not linked into this program.
+
+Released builds of the window carry an **LGPL** ffmpeg beside the executable,
+never a GPL one: this program is MIT or Apache-2.0, and a GPL binary in the
+same bundle would carry GPL obligations into it. An LGPL build covers every
+format written here — MP3 through libmp3lame, AAC through ffmpeg's own encoder,
+and FLAC, ALAC and PCM natively. Windows takes BtbN's published LGPL build;
+nobody publishes one for macOS, so
+[the release workflow compiles it](.github/scripts/build-ffmpeg-macos.sh) with
+the GPL-only components left out.
+
+A checkout has no such copy and falls back to whatever `ffmpeg` is on your
+PATH, which is also what anyone keeping their own build would want.

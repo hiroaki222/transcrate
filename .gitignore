@@ -5,12 +5,12 @@
 node_modules/
 dist/
 
-# Tauri
-/apps/gui/src-tauri/target/
-/apps/gui/src-tauri/gen/
+# Tauri: schemas are regenerated from the capability files on every build
+/gui/src-tauri/gen/
 
-# ffmpeg sidecars, fetched at build time rather than committed
-/vendor/ffmpeg/
+# ffmpeg sidecars, fetched at release time rather than committed
+/gui/src-tauri/binaries/*
+!/gui/src-tauri/binaries/README.md
 
 # macOS
 .DS_Store
