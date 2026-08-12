@@ -9,9 +9,16 @@ Transcrate converts audio with ffmpeg and checks the result against what CDJs
 and XDJs actually accept: codecs, sample rates, bit depths and filesystems,
 taken from the manufacturers' manuals.
 
-**Status: it works, and there is nothing to download yet.** Conversion, the
-per-player verdict, the drive check and the window are all in place; releases
-are not.
+[**Download the latest release**](https://github.com/hiroaki222/transcrate/releases/latest)
+— a `.dmg` for Apple silicon, an `.exe` for Windows, each carrying its own
+ffmpeg.
+
+![The window, with a folder of tracks and what each one will play on](docs/images/convert.png)
+
+Every track carries ten lamps, one per player, in the same order every time. A
+second row shows the same verdict after conversion, so a red row can be seen
+turning green before anything is committed to. Failing lamps are hatched as
+well as red, so the reading does not depend on colour.
 
 ## The window
 
@@ -36,6 +43,9 @@ Three screens:
   anything is committed to.
 - **USB CHECK** — point it at a drive and see which players will read it.
   Read-only, and there is no format button.
+
+  ![A drive checked against every player](docs/images/usb-check.png)
+
 - **DEVICES** — the compatibility table itself, release year beside each player.
 
 The interface follows whatever language the machine is set to, Japanese or
