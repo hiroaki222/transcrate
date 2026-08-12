@@ -5,65 +5,35 @@
 Convert tracks for your USB stick, and know they will play before you get to the
 club.
 
-Transcrate converts audio with ffmpeg and checks the result against what CDJs
-and XDJs actually accept: codecs, sample rates, bit depths and filesystems,
-taken from the manufacturers' manuals.
+[**Download**](https://github.com/hiroaki222/transcrate/releases/latest) — a
+`.dmg` for Apple silicon, an `.exe` for Windows. Both carry their own ffmpeg, so
+there is nothing else to install.
 
-[**Download the latest release**](https://github.com/hiroaki222/transcrate/releases/latest)
-— a `.dmg` for Apple silicon, an `.exe` for Windows, each carrying its own
-ffmpeg.
-
-![The window, with a folder of tracks and what each one will play on](docs/images/convert.png)
+![The app, with a folder of tracks and what each one will play on](docs/images/convert.png)
 
 Each track shows ten lights, one per player, always in the same order. A second
 row shows the verdict after conversion, so you can see a rejected track turn
 green before converting anything. Failing lights are hatched as well as red, so
 reading them does not depend on colour.
 
-## The window
+There is a command line too, and a compatibility table taken from the
+manufacturers' manuals. Everything below is one of those three.
 
-For anyone who would rather not open a terminal. Same core, same table, same
-answers.
+## Why this exists
 
-```sh
-cd gui
-bun install
-bun run tauri dev
-```
+DJ gear disagrees with itself, and not in ways you can guess:
 
-Needs [Bun](https://bun.sh) and ffmpeg on your PATH. `bun run tauri build`
-produces a `.dmg` on macOS and an `.exe` installer on Windows.
+- **A CDJ-2000NXS2 from 2016 plays 96 kHz FLAC. An XDJ-AN from 2026 stops at
+  48 kHz.** Newer is not better.
+- **That same NXS2 cannot read an exFAT stick.** Everything from 2020 on can —
+  except the XDJ-RX3, which reads exFAT and refuses 96 kHz. The limits cross,
+  so you cannot rank the players on one scale.
+- **`.m4a` holds either AAC or ALAC.** Some players take only AAC and throw
+  `E-8305` at the other. The extension gives you no warning.
 
-Three screens:
+Get one of these wrong and you find out in the booth.
 
-- **CONVERT** — drop tracks or a folder on the window. Each row says what the
-  file is, what it would become, and ten lights: one per player, green where it
-  plays and hatched red where it will not. A second row shows the verdict after
-  conversion, so you can see a rejected track turn green before converting
-  anything.
-- **USB CHECK** — point it at a drive and see which players will read it.
-  Read-only, and there is no format button.
-
-  ![A drive checked against every player](docs/images/usb-check.png)
-
-- **DEVICES** — the compatibility table itself, release year beside each player.
-
-The interface follows whatever language the machine is set to, Japanese or
-English, and can be pinned to either.
-
-Where official sources contradict each other the window takes the stricter
-reading, so the XDJ-XZ's disputed exFAT support shows as a plain no. That is
-not something you can settle in a booth.
-
-## Command line
-
-Needs Rust 1.88 or newer.
-
-```sh
-git clone https://github.com/hiroaki222/transcrate
-cd transcrate
-cargo run -p transcrate-cli -- devices
-```
+## What plays where
 
 ```
 DEVICE         YEAR     MP3   AAC    WAV   AIFF   FLAC   ALAC  EXFAT
@@ -79,10 +49,46 @@ XDJ-RR         2018     48k   48k    48k    48k      -      -  no
 CDJ-2000NXS2   2016     48k   48k    96k    96k    96k    96k  no
 ```
 
-Convert a folder. Needs ffmpeg on your PATH:
+Every figure is from a manufacturer's manual, with the document number recorded
+in [docs/device-compatibility.md](docs/device-compatibility.md).
+
+Where the official sources contradict each other — the XDJ-XZ and exFAT — the
+table says so rather than picking a side. The app takes the stricter reading and
+shows a plain no, because that is not something you can settle in a booth.
+
+## The app
+
+[Download it](https://github.com/hiroaki222/transcrate/releases/latest), open
+it, and drop a folder on the window.
+
+Neither build is signed with a paid certificate — Apple's costs $99 a year,
+which is hard to justify before anyone is using this — so both systems warn the
+first time it opens. Allowing it once is enough. Apple documents the macOS side:
+[Open a Mac app from an unknown developer][unsigned-mac]. On Windows,
+SmartScreen asks for **More info → Run anyway**.
+
+Three screens:
+
+- **CONVERT** — each row says what the file is, what it would become, and ten
+  lights: one per player, green where it plays and hatched red where it will
+  not. A second row shows the verdict after conversion.
+- **USB CHECK** — point it at a drive and see which players will read it.
+  Read-only, and there is no format button.
+
+  ![A drive checked against every player](docs/images/usb-check.png)
+
+- **DEVICES** — the table above, release year beside each player.
+
+The interface follows whatever language the machine is set to, Japanese or
+English, and can be pinned to either.
+
+## The command line
+
+The release carries an archive per platform holding one binary. This one expects
+ffmpeg on your PATH; only the app brings its own.
 
 ```sh
-cargo run -p transcrate-cli -- convert ~/Music
+transcrate convert ~/Music
 ```
 
 Three ways to say "all of them":
@@ -121,9 +127,8 @@ never written to. Anything already in the target format is copied rather than
 re-encoded, which is both faster and kinder to a lossy original.
 
 Files convert in parallel, one per core, and each line appears as that file
-lands. Fourteen 60-second 96 kHz FLACs down to MP3 took 2.96 s one at a time
-and 0.56 s across 14 cores here — the same CPU time, five times less waiting.
-`-j N` caps the number of jobs if you want the machine back.
+lands — fourteen 60-second 96 kHz FLACs took 2.96 s one at a time and 0.56 s
+across 14 cores here. `-j N` caps the number of jobs.
 
 Three profiles, chosen with `-p`:
 
@@ -137,7 +142,7 @@ Or name a format directly. That changes the container and nothing else, keeping
 the source's rate and depth:
 
 ```sh
-cargo run -p transcrate-cli -- convert ~/Music/track.flac --to aiff
+transcrate convert ~/Music/track.flac --to aiff
 ```
 
 `mp3`, `aac`, `alac`, `flac`, `wav`, `aiff`. A profile carries limits with it
@@ -147,57 +152,10 @@ result if it is going to a gig.
 Reducing bit depth adds dither automatically. Resampling does not, because
 that is not what dither is for.
 
-### Tags and artwork
-
-Everything the source carried comes across, except `lyrics-eng`. Nobody reads
-lyrics off a CDJ, and it is where rippers leave their advertising. Title,
-artist, album, genre, key and BPM are what the browser is for, so they stay.
-
-The comment stays too. Shops fill it with advertising and a CDJ shows it in the
-browser next to the title, which is an argument for clearing it — but it is
-also where DJs keep their own cue notes and Camelot keys, and those cannot be
-got back. `--clear-comment` empties it when you want that.
-
-### Tidying tags without converting
+### Checking files
 
 ```sh
-transcrate retag ~/Music
-```
-
-```
-[1/3] track.aiff -> _transcrate/track.aiff  (tags rewritten, audio untouched)
-[2/3] already.mp3 -> _transcrate/already.mp3  (tags rewritten, audio untouched)
-[3/3] track.flac -> _transcrate/track.flac  (tags rewritten, audio untouched)
-```
-
-Every file comes out in the format it went in as, so a folder holding MP3 next
-to AIFF takes one command rather than one per extension. The audio stream is
-copied across untouched: a lossy file loses nothing to a change of text, and
-nothing is spent re-encoding audio that was already correct.
-
-`--no-artwork` and `--clear-comment` mean the same here as on `convert`:
-
-```sh
-transcrate retag ~/Music --no-artwork                 # drop every sleeve
-transcrate retag ~/Music --no-artwork --clear-comment  # sleeves out, comments too
-```
-
-Embedded artwork rides along, labelled the way rekordbox and the CDJ browser
-expect to find it. `--no-artwork` drops it instead.
-
-Two details that are easy to lose:
-
-- **MP3 and AIFF are written as ID3v2.3**, not ffmpeg's default of 2.4. Players
-  are more consistent with 2.3.
-- **The AIFF muxer writes no ID3 chunk unless asked**, and the artwork goes with
-  it. AIFF's own chunks still carry the title and artist, so the loss shows up
-  as a missing sleeve rather than as an untagged file. That flag is set here.
-
-Ask what a file will play on. This one needs `ffprobe` on your PATH, which comes
-with ffmpeg:
-
-```sh
-cargo run -p transcrate-cli -- check ~/Music/track.flac
+transcrate check ~/Music/track.flac
 ```
 
 ```
@@ -211,17 +169,11 @@ cargo run -p transcrate-cli -- check ~/Music/track.flac
   XDJ-RR         FLAC is not supported
 ```
 
-Narrow it to the gear you are actually taking:
+Narrow it to the gear you are actually taking, and leave out everything that
+already plays:
 
 ```sh
-cargo run -p transcrate-cli -- check ~/Music/*.flac --device cdj-3000,xdj-rr
-```
-
-`--failing` leaves out everything that already plays, so a folder prints only
-what needs doing:
-
-```sh
-transcrate check ~/Music --failing -d xdj-rr
+transcrate check ~/Music --failing -d cdj-3000,xdj-rr
 ```
 
 ```
@@ -240,65 +192,10 @@ Failing means *any* of the named players rejects it, not all of them: a track
 that plays on nine out of ten is still the one that stops the set.
 
 A counter runs on stderr while it works, and only when stderr is a terminal, so
-piping the report into a file or another program keeps it clean.
+piping the report into a file or another program keeps it clean. It exits
+non-zero if anything is rejected, so it can gate a script.
 
-It exits non-zero if anything is rejected, so it can gate a script.
-
-### Installing it on your PATH
-
-```sh
-cargo install --path crates/transcrate-cli --locked
-transcrate completions zsh > ~/.zfunc/_transcrate
-```
-
-Run both again after pulling. The binary and the completion script are
-generated separately, so a stale install answers `unrecognized subcommand` for
-a command the source has, and a stale completion offers flags that no longer
-exist.
-
-### Shell completion
-
-```sh
-mkdir -p ~/.zfunc
-transcrate completions zsh > ~/.zfunc/_transcrate
-```
-
-Then, in `~/.zshrc`:
-
-```sh
-fpath=("$HOME/.zfunc" $fpath)
-autoload -Uz compinit && compinit
-```
-
-`bash`, `fish`, `powershell` and `elvish` work too. Player ids complete as well,
-so `--device <TAB>` lists all ten.
-
-Under zsh, file arguments offer audio files and directories only, so the folder
-of artwork and PDFs sitting next to your tracks stays out of the way.
-
-Tests and lints, the same three CI runs:
-
-```sh
-cargo fmt --all --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-features
-```
-
-## Why
-
-DJ gear disagrees with itself, and not in ways you can guess:
-
-- **A CDJ-2000NXS2 from 2016 plays 96 kHz FLAC. An XDJ-AN from 2026 stops at
-  48 kHz.** Newer is not better.
-- **That same NXS2 cannot read an exFAT stick.** Everything from 2020 on can —
-  except the XDJ-RX3, which reads exFAT and refuses 96 kHz. The limits cross,
-  so you cannot rank the players on one scale.
-- **`.m4a` holds either AAC or ALAC.** Some players take only AAC and throw
-  `E-8305` at the other. The extension gives you no warning.
-
-Get one of these wrong and you find out in the booth.
-
-## Checking a drive
+### Checking a drive
 
 ```sh
 transcrate usb /Volumes/DJ
@@ -321,47 +218,121 @@ plugging into, and it exits non-zero if any of those will not read the drive.
 **Read-only.** Nothing here writes to a drive, formats one or moves a file. A
 tool you run on your own set should not be able to damage it.
 
-## Where the numbers come from
+### Tags and artwork
 
-Every figure is from a manufacturer's manual, with the document number recorded
-in [docs/device-compatibility.md](docs/device-compatibility.md).
+Everything the source carried comes across, except `lyrics-eng`. Nobody reads
+lyrics off a CDJ, and it is where rippers leave their advertising. Title,
+artist, album, genre, key and BPM are what the browser is for, so they stay.
 
-Where the official sources contradict each other — the XDJ-XZ and exFAT — the
-table says so rather than picking a side.
+The comment stays too. Shops fill it with advertising and a CDJ shows it in the
+browser next to the title, which is an argument for clearing it — but it is
+also where DJs keep their own cue notes and Camelot keys, and those cannot be
+got back. `--clear-comment` empties it when you want that.
 
-## Roadmap
+Embedded artwork rides along, labelled the way rekordbox and the CDJ browser
+expect to find it. `--no-artwork` drops it instead.
 
-Working:
+Two details that are easy to lose:
 
-- Convert between WAV, FLAC, AIFF, M4A and MP3, several at once
-- A verdict per player, from the table above
-- Check a USB stick. Read-only: it never writes to your drive
-- Tags and artwork carried across, cleared or left alone
-- A window for macOS and Windows, on the same core as the command line
-- ffmpeg bundled with the releases, so nothing has to be installed first
+- **MP3 and AIFF are written as ID3v2.3**, not ffmpeg's default of 2.4. Players
+  are more consistent with 2.3.
+- **The AIFF muxer writes no ID3 chunk unless asked**, and the artwork goes with
+  it. AIFF's own chunks still carry the title and artist, so the loss shows up
+  as a missing sleeve rather than as an untagged file. That flag is set here.
 
-Next:
+To fix tags without touching the audio:
+
+```sh
+transcrate retag ~/Music
+```
+
+```
+[1/3] track.aiff -> _transcrate/track.aiff  (tags rewritten, audio untouched)
+[2/3] already.mp3 -> _transcrate/already.mp3  (tags rewritten, audio untouched)
+[3/3] track.flac -> _transcrate/track.flac  (tags rewritten, audio untouched)
+```
+
+Every file comes out in the format it went in as, so a folder holding MP3 next
+to AIFF takes one command rather than one per extension. The audio stream is
+copied across untouched: a lossy file loses nothing to a change of text, and
+nothing is spent re-encoding audio that was already correct.
+
+### Shell completion
+
+```sh
+mkdir -p ~/.zfunc
+transcrate completions zsh > ~/.zfunc/_transcrate
+```
+
+Then, in `~/.zshrc`:
+
+```sh
+fpath=("$HOME/.zfunc" $fpath)
+autoload -Uz compinit && compinit
+```
+
+`bash`, `fish`, `powershell` and `elvish` work too. Player ids complete as well,
+so `--device <TAB>` lists all ten.
+
+Under zsh, file arguments offer audio files and directories only, so the folder
+of artwork and PDFs sitting next to your tracks stays out of the way.
+
+## Build from source
+
+Needs Rust 1.88 or newer, and ffmpeg on your PATH. A checkout carries no bundled
+copy and falls back to whatever `ffmpeg` it finds, which is also what anyone
+keeping their own build would want.
+
+```sh
+git clone https://github.com/hiroaki222/transcrate
+cd transcrate
+cargo run -p transcrate-cli -- devices
+```
+
+To put the command line on your PATH:
+
+```sh
+cargo install --path crates/transcrate-cli --locked
+transcrate completions zsh > ~/.zfunc/_transcrate
+```
+
+Run both again after pulling. The binary and the completion script are
+generated separately, so a stale install answers `unrecognized subcommand` for
+a command the source has, and a stale completion offers flags that no longer
+exist.
+
+The app needs [Bun](https://bun.sh) as well:
+
+```sh
+cd gui
+bun install
+bun run tauri dev
+```
+
+`bun run tauri build` produces a `.dmg` on macOS and an `.exe` installer on
+Windows, without the bundled ffmpeg that a release carries.
+
+## Contributing
+
+The same three checks CI runs:
+
+```sh
+cargo fmt --all --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
+```
+
+The integration tests run real conversions and refuse to skip when ffmpeg is
+missing on CI, because they are the only thing checking that the argument lists
+put in front of the encoder actually work.
+
+## Next
 
 - Read a stick's contents, not only its filesystem
 - `--json`, so other programs can act on the verdicts
 
-## Releases
-
-Tagging one builds and attaches:
-
-- **The window** — a `.dmg` for Apple silicon and an `.exe` installer for
-  Windows, each carrying its own ffmpeg so nothing has to be installed first.
-- **The command line** — an archive per platform, holding one binary. This one
-  expects ffmpeg on your PATH.
-
-Apple silicon only on macOS. The last Intel Mac shipped in 2020, and building
-for one costs a second ffmpeg and a universal bundle.
-
-Neither is signed with a paid certificate. Apple's costs $99 a year, which is
-hard to justify before anyone is using this, so both systems warn the first time
-the app is opened. Allowing it once is enough. Apple documents the macOS side:
-[Open a Mac app from an unknown developer][unsigned-mac]. On Windows,
-SmartScreen asks for **More info → Run anyway**.
+Apple silicon only on macOS. The last Intel Mac shipped in 2020, and supporting
+one costs a second ffmpeg build and a universal bundle.
 
 [unsigned-mac]: https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac
 
@@ -371,14 +342,11 @@ SmartScreen asks for **More info → Run anyway**.
 
 ffmpeg runs as a separate process and is not linked into this program.
 
-Released builds of the window carry an **LGPL** ffmpeg beside the executable,
-never a GPL one: this program is MIT or Apache-2.0, and a GPL binary in the
-same bundle would carry GPL obligations into it. An LGPL build covers every
-format written here — MP3 through libmp3lame, AAC through ffmpeg's own encoder,
-and FLAC, ALAC and PCM natively. Windows takes BtbN's published LGPL build;
-nobody publishes one for macOS, so
+Released builds of the app carry an **LGPL** ffmpeg beside the executable, never
+a GPL one: this program is MIT or Apache-2.0, and a GPL binary in the same
+bundle would carry GPL obligations into it. An LGPL build covers every format
+written here — MP3 through libmp3lame, AAC through ffmpeg's own encoder, and
+FLAC, ALAC and PCM natively. Windows takes BtbN's published LGPL build; nobody
+publishes one for macOS, so
 [the release workflow compiles it](.github/scripts/build-ffmpeg-macos.sh) with
 the GPL-only components left out.
-
-A checkout has no such copy and falls back to whatever `ffmpeg` is on your
-PATH, which is also what anyone keeping their own build would want.
