@@ -25,21 +25,37 @@ jobs:
           # git-cliff reads the whole history to work out what this tag added.
           fetch-depth: 0
 
-      - uses: orhun/git-cliff-action@v4
-        id: notes
-        with:
-          args: --latest --strip all
+      # Fetched here rather than through the action, which gave up on a bad
+      # connection and took the whole release with it.
+      - name: Fetch git-cliff
+        run: |
+          set -euo pipefail
+          version=2.13.1
+          name="git-cliff-$version-x86_64-unknown-linux-gnu"
+
+          bash .github/scripts/fetch.sh \
+            "https://github.com/orhun/git-cliff/releases/download/v$version/$name.tar.gz" \
+            cliff.tar.gz
+
+          tar -xzf cliff.tar.gz
+          find . -type f -name git-cliff -exec mv {} ./git-cliff \;
+          chmod +x ./git-cliff
+          ./git-cliff --version
 
       # The first-run notice goes last because GitHub renders the assets below
       # the body: the end of the text is the spot nearest the download links,
       # where someone about to download will actually read it. It lives here
       # rather than in CHANGELOG.md, which would repeat it once per version.
       - name: Assemble the release body
-        env:
-          CHANGES: ${{ steps.notes.outputs.content }}
         run: |
-          printf '%s\n\n' "$CHANGES" > release-body.md
+          set -euo pipefail
+          ./git-cliff --latest --strip all > release-body.md
+          printf '\n' >> release-body.md
           cat .github/release-notice.md >> release-body.md
+
+          # An empty changelog means the tag matched no commits, which is a
+          # mistake worth stopping for rather than publishing around.
+          test -s release-body.md
 
       # A candidate is marked as one. GitHub does not read the tag, so without
       # this a `-rc1` would sit at the top of the page as the current release.
@@ -151,8 +167,9 @@ jobs:
               done
               ;;
             Windows)
-              curl -fsSL -o ffmpeg.zip \
-                https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip
+              bash "$GITHUB_WORKSPACE/.github/scripts/fetch.sh" \
+                https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip \
+                ffmpeg.zip
               unzip -q ffmpeg.zip
               for tool in ffmpeg ffprobe; do
                 find . -name "$tool.exe" -exec mv {} "$tool-${{ matrix.target }}.exe" \;

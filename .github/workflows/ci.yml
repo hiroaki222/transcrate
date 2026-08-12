@@ -64,6 +64,9 @@ jobs:
       # Windows because Chocolatey's ffmpeg has gone missing from the feed more
       # than once. Setup actions were tried and dropped: they distribute static
       # builds, and there is not always one for the arm64 macOS runners.
+      #
+      # The download retries: GitHub's release host is the one thing here that
+      # fails on its own, and it took out a run and a release in the same hour.
       - name: Install ffmpeg
         shell: bash
         run: |
@@ -77,8 +80,9 @@ jobs:
               brew install ffmpeg
               ;;
             Windows)
-              curl -fsSL -o ffmpeg.zip \
-                https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip
+              bash .github/scripts/fetch.sh \
+                https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip \
+                ffmpeg.zip
               unzip -q ffmpeg.zip
               # The archive's top folder carries the build date, so it is found
               # rather than named. PATH needs it absolute and in Windows form:
