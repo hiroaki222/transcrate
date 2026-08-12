@@ -15,10 +15,10 @@ ffmpeg.
 
 ![The window, with a folder of tracks and what each one will play on](docs/images/convert.png)
 
-Every track carries ten lamps, one per player, in the same order every time. A
-second row shows the same verdict after conversion, so a red row can be seen
-turning green before anything is committed to. Failing lamps are hatched as
-well as red, so the reading does not depend on colour.
+Each track shows ten lights, one per player, always in the same order. A second
+row shows the verdict after conversion, so you can see a rejected track turn
+green before converting anything. Failing lights are hatched as well as red, so
+reading them does not depend on colour.
 
 ## The window
 
@@ -32,15 +32,15 @@ bun run tauri dev
 ```
 
 Needs [Bun](https://bun.sh) and ffmpeg on your PATH. `bun run tauri build`
-produces a `.app` on macOS and an `.msi` on Windows.
+produces a `.dmg` on macOS and an `.exe` installer on Windows.
 
 Three screens:
 
 - **CONVERT** — drop tracks or a folder on the window. Each row says what the
-  file is, what it would become, and carries ten lamps: one per player, green
-  where it plays and hatched red where it will not. A second row of lamps shows
-  the verdict after conversion, so a red row can be seen turning green before
-  anything is committed to.
+  file is, what it would become, and ten lights: one per player, green where it
+  plays and hatched red where it will not. A second row shows the verdict after
+  conversion, so you can see a rejected track turn green before converting
+  anything.
 - **USB CHECK** — point it at a drive and see which players will read it.
   Read-only, and there is no format button.
 
@@ -52,8 +52,8 @@ The interface follows whatever language the machine is set to, Japanese or
 English, and can be pinned to either.
 
 Where official sources contradict each other the window takes the stricter
-reading, so the XDJ-XZ's disputed exFAT support shows as a plain no. A
-contradiction is not something anyone can settle in a booth.
+reading, so the XDJ-XZ's disputed exFAT support shows as a plain no. That is
+not something you can settle in a booth.
 
 ## Command line
 
@@ -319,8 +319,7 @@ are still in plenty of booths. `-d` narrows it to the gear you are actually
 plugging into, and it exits non-zero if any of those will not read the drive.
 
 **Read-only.** Nothing here writes to a drive, formats one or moves a file. A
-tool you point at your set on a Friday evening has no business being able to
-damage it.
+tool you run on your own set should not be able to damage it.
 
 ## Where the numbers come from
 
@@ -339,16 +338,16 @@ Working:
 - Check a USB stick. Read-only: it never writes to your drive
 - Tags and artwork carried across, cleared or left alone
 - A window for macOS and Windows, on the same core as the command line
+- ffmpeg bundled with the releases, so nothing has to be installed first
 
 Next:
 
-- Bundle ffmpeg, so nothing has to be installed before the app will run
 - Read a stick's contents, not only its filesystem
 - `--json`, so other programs can act on the verdicts
 
 ## Releases
 
-None cut yet, but tagging one builds and attaches:
+Tagging one builds and attaches:
 
 - **The window** — a `.dmg` for Apple silicon and an `.exe` installer for
   Windows, each carrying its own ffmpeg so nothing has to be installed first.
@@ -358,10 +357,10 @@ None cut yet, but tagging one builds and attaches:
 Apple silicon only on macOS. The last Intel Mac shipped in 2020, and building
 for one costs a second ffmpeg and a universal bundle.
 
-Both are unsigned. An Apple developer certificate costs $99 a year, which is
-hard to justify before anyone is using this. macOS blocks an unsigned app the
-first time it is opened, and Apple documents the way through: [Open a Mac app
-from an unknown developer][unsigned-mac]. You do it once. On Windows,
+Neither is signed with a paid certificate. Apple's costs $99 a year, which is
+hard to justify before anyone is using this, so both systems warn the first time
+the app is opened. Allowing it once is enough. Apple documents the macOS side:
+[Open a Mac app from an unknown developer][unsigned-mac]. On Windows,
 SmartScreen asks for **More info → Run anyway**.
 
 [unsigned-mac]: https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac
