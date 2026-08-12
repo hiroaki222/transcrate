@@ -6,7 +6,8 @@ use clap::builder::PossibleValuesParser;
 use clap::{CommandFactory, Parser, Subcommand, ValueHint};
 use clap_complete::Shell;
 use transcrate_core::convert::ConvertError;
-use transcrate_core::plan::{self, Action, Artwork, MetadataPolicy, Target};
+use transcrate_core::files::{self, PreviousOutput};
+use transcrate_core::plan::{Action, Artwork, MetadataPolicy, Target};
 use transcrate_core::usb;
 use transcrate_core::{
     AudioSpec, Codec, DEVICES, DeviceProfile, FileSystem, Issue, Support, by_id, check, convert,
@@ -334,7 +335,7 @@ fn run_jobs(
 
     // Plan everything before encoding anything, so a file that cannot be read
     // is named straight away rather than after minutes of work on the rest.
-    let inputs = collect_inputs(files, PreviousOutput::Skip);
+    let inputs = files::collect(files, PreviousOutput::Skip);
     if inputs.is_empty() {
         eprintln!("no audio files among the paths given");
         return ExitCode::FAILURE;
@@ -344,10 +345,10 @@ fn run_jobs(
     let mut all_done = true;
 
     for input in &inputs {
-        match prepare(input, into, ffprobe, target_for) {
+        match convert::prepare(input, into, ffprobe, target_for) {
             Ok(job) => planned.push(job),
-            Err(message) => {
-                eprintln!("{message}");
+            Err(error) => {
+                eprintln!("{error}");
                 all_done = false;
             }
         }
@@ -500,29 +501,6 @@ fn enclosing_path(path: &Path) -> String {
     }
 }
 
-fn prepare(
-    input: &Path,
-    into: Option<&Path>,
-    ffprobe: &Path,
-    target_for: &dyn Fn(&AudioSpec) -> Target,
-) -> Result<convert::Job, String> {
-    let source =
-        probe::run(ffprobe, input).map_err(|error| format!("{}: {error}", input.display()))?;
-    let plan = plan::plan(&source, &target_for(&source));
-    let output = output_path(input, into, plan.output.codec)?;
-
-    if let Some(parent) = output.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("{}: {error}", parent.display()))?;
-    }
-
-    Ok(convert::Job {
-        plan,
-        input: input.to_path_buf(),
-        output,
-    })
-}
-
 /// Work out what to convert into.
 ///
 /// clap rules out naming both, so this only has to decide between one, the
@@ -545,124 +523,10 @@ fn resolve_target(profile: Option<&str>, to: Option<&str>) -> Result<Target, Str
     }
 }
 
-/// Where a converted file lands.
-///
-/// Defaults to a `_transcrate` folder beside the input, so results sit next to
-/// the tracks they came from and never inside the source library itself.
-fn output_path(input: &Path, into: Option<&Path>, codec: Codec) -> Result<PathBuf, String> {
-    let stem = input
-        .file_stem()
-        .ok_or_else(|| format!("{} has no file name", input.display()))?;
-
-    let directory = match into {
-        Some(dir) => dir.to_path_buf(),
-        None => input.parent().unwrap_or(Path::new(".")).join("_transcrate"),
-    };
-
-    let mut destination = directory.join(stem);
-    destination.set_extension(extension_for(codec));
-
-    if destination == input {
-        return Err(format!(
-            "refusing to overwrite the source: {}",
-            input.display()
-        ));
-    }
-
-    Ok(destination)
-}
-
-const fn extension_for(codec: Codec) -> &'static str {
-    match codec {
-        Codec::Mp3 => "mp3",
-        // The same ambiguity the reader has to cope with: both live in .m4a.
-        Codec::AacLc | Codec::Alac => "m4a",
-        Codec::Flac => "flac",
-        Codec::PcmWav => "wav",
-        Codec::PcmAiff => "aiff",
-    }
-}
-
-/// The containers this program reads, used both to sweep a folder and to build
-/// the shell completion. One list so the two cannot drift apart.
-const AUDIO_EXTENSIONS: [&str; 8] = ["wav", "flac", "aif", "aiff", "m4a", "mp3", "aac", "mp4"];
-
-/// Where converted files go.
-const OUTPUT_FOLDER: &str = "_transcrate";
-
-/// Whether a sweep descends into a previous run's output folder.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PreviousOutput {
-    /// Converting: taking it back in would re-encode the last run's results,
-    /// and for a lossy format that means losing a little more each time.
-    Skip,
-    /// Checking: "did what I made come out playable" is the obvious question to
-    /// ask of a folder of conversions, so it has to be answerable.
-    Include,
-}
-
-/// Expand directories into the audio inside them, recursively.
-///
-/// One path on its own is taken at its word, whatever it is called: someone who
-/// typed a single filename meant that file, and ffprobe judges it better than
-/// the extension does. Several at once is almost always a glob the shell
-/// expanded, and a shell hands over the artwork and the playlists too — so
-/// there, only audio comes through.
-fn collect_inputs(paths: &[PathBuf], previous: PreviousOutput) -> Vec<PathBuf> {
-    let expanded_by_the_shell = paths.len() > 1;
-    let mut found = Vec::new();
-
-    for path in paths {
-        if path.is_dir() {
-            sweep(path, previous, &mut found);
-        } else if !expanded_by_the_shell || is_audio(path) {
-            found.push(path.clone());
-        }
-    }
-
-    // read_dir returns entries in whatever order the filesystem holds them,
-    // which would make the report jump around between runs.
-    found.sort();
-    found
-}
-
-fn sweep(directory: &Path, previous: PreviousOutput, into: &mut Vec<PathBuf>) {
-    let is_previous_output = directory
-        .file_name()
-        .is_some_and(|name| name == OUTPUT_FOLDER);
-
-    if is_previous_output && previous == PreviousOutput::Skip {
-        return;
-    }
-
-    let Ok(entries) = std::fs::read_dir(directory) else {
-        return;
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            sweep(&path, previous, into);
-        } else if is_audio(&path) {
-            into.push(path);
-        }
-    }
-}
-
-fn is_audio(path: &Path) -> bool {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| {
-            AUDIO_EXTENSIONS
-                .iter()
-                .any(|known| known.eq_ignore_ascii_case(ext))
-        })
-}
-
 /// The zsh glob for the same set. `(#i)` makes it case-insensitive, so a `.WAV`
 /// ripped years ago still shows up.
 fn audio_glob() -> String {
-    format!("(#i)*.({})", AUDIO_EXTENSIONS.join("|"))
+    format!("(#i)*.({})", files::AUDIO_EXTENSIONS.join("|"))
 }
 
 fn write_completions(shell: Shell, out: &mut impl std::io::Write) {
@@ -712,7 +576,7 @@ fn run_check(
         }
     };
 
-    let inputs = collect_inputs(files, PreviousOutput::Include);
+    let inputs = files::collect(files, PreviousOutput::Include);
     if inputs.is_empty() {
         eprintln!("no audio files among the paths given");
         return ExitCode::FAILURE;
@@ -1057,95 +921,6 @@ mod tests {
         assert!(script.contains("devices"));
     }
 
-    fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("transcrate-cli-{name}"));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("create scratch dir");
-        dir
-    }
-
-    /// Pointing at a folder is the common case — nobody wants to name four
-    /// hundred tracks, and a shell glob does not reach into subfolders.
-    #[test]
-    fn a_directory_expands_to_the_audio_inside_it() {
-        let dir = scratch("collect");
-        std::fs::create_dir_all(dir.join("sub")).expect("subdir");
-        std::fs::write(dir.join("a.wav"), b"").expect("write");
-        std::fs::write(dir.join("sub/b.flac"), b"").expect("write");
-        std::fs::write(dir.join("cover.jpg"), b"").expect("write");
-        std::fs::write(dir.join("notes.txt"), b"").expect("write");
-
-        let names: Vec<_> = collect_inputs(&[dir], PreviousOutput::Skip)
-            .iter()
-            .filter_map(|path| path.file_name())
-            .map(|name| name.to_string_lossy().into_owned())
-            .collect();
-
-        assert_eq!(names, ["a.wav", "b.flac"]);
-    }
-
-    /// Converting a folder twice must not convert the first run's output: that
-    /// would re-encode a lossy file into itself, losing a little more each time.
-    /// Checking one should look at it, though — "did what I made come out
-    /// playable" is the obvious question to ask of a folder of conversions.
-    #[test]
-    fn only_converting_skips_a_previous_runs_output() {
-        let dir = scratch("collect-previous-output");
-        std::fs::create_dir_all(dir.join("_transcrate")).expect("subdir");
-        std::fs::write(dir.join("track.wav"), b"").expect("write");
-        std::fs::write(dir.join("_transcrate/track.mp3"), b"").expect("write");
-
-        let names = |previous| {
-            collect_inputs(std::slice::from_ref(&dir), previous)
-                .iter()
-                .filter_map(|path| path.file_name())
-                .map(|name| name.to_string_lossy().into_owned())
-                .collect::<Vec<_>>()
-        };
-
-        assert_eq!(names(PreviousOutput::Skip), ["track.wav"]);
-        assert_eq!(names(PreviousOutput::Include), ["track.mp3", "track.wav"]);
-    }
-
-    /// One path named on its own is taken at its word, whatever it is called.
-    /// Someone who typed a single filename meant that file, and ffprobe is a
-    /// better judge of it than the extension.
-    #[test]
-    fn a_single_named_file_is_taken_as_given() {
-        let dir = scratch("collect-explicit");
-        let odd = dir.join("no-extension");
-        std::fs::write(&odd, b"").expect("write");
-
-        assert_eq!(
-            collect_inputs(std::slice::from_ref(&odd), PreviousOutput::Skip),
-            vec![odd]
-        );
-    }
-
-    /// `transcrate convert *` is the obvious way to do a folder from the shell,
-    /// and the shell hands over everything in it: artwork, playlists, notes.
-    /// Reporting each of those as a failure would bury the conversions.
-    #[test]
-    fn several_paths_at_once_keep_only_the_audio() {
-        let dir = scratch("collect-glob");
-        let expanded: Vec<_> = ["a.wav", "b.flac", "cover.jpg", "playlist.m3u", "notes.txt"]
-            .iter()
-            .map(|name| {
-                let path = dir.join(name);
-                std::fs::write(&path, b"").expect("write");
-                path
-            })
-            .collect();
-
-        let names: Vec<_> = collect_inputs(&expanded, PreviousOutput::Skip)
-            .iter()
-            .filter_map(|path| path.file_name())
-            .map(|name| name.to_string_lossy().into_owned())
-            .collect();
-
-        assert_eq!(names, ["a.wav", "b.flac"]);
-    }
-
     /// A profile carries limits with it and a format does not, so asking for
     /// both is ambiguous rather than additive.
     #[test]
@@ -1178,61 +953,6 @@ mod tests {
     fn a_format_resolves_to_a_target_that_changes_nothing_else() {
         let target = resolve_target(None, Some("aiff")).expect("aiff");
         assert_eq!(target, Target::from_format("aiff").expect("aiff"));
-    }
-
-    /// Conversions land beside the source rather than in the working directory,
-    /// so converting a folder leaves the results next to the tracks they came
-    /// from instead of wherever the shell happened to be.
-    #[test]
-    fn output_lands_in_a_subfolder_beside_the_input() {
-        let path = output_path(Path::new("/music/track.flac"), None, Codec::Mp3).expect("path");
-        assert_eq!(path, Path::new("/music/_transcrate/track.mp3"));
-    }
-
-    #[test]
-    fn a_named_directory_takes_the_files_instead() {
-        let path = output_path(
-            Path::new("/music/track.flac"),
-            Some(Path::new("/out")),
-            Codec::Mp3,
-        )
-        .expect("path");
-        assert_eq!(path, Path::new("/out/track.mp3"));
-    }
-
-    /// Someone's library is not ours to overwrite. Converting an MP3 to MP3
-    /// into its own directory would land straight on top of the original, and
-    /// no amount of speed makes that worth it.
-    #[test]
-    fn writing_over_the_source_is_refused() {
-        let error = output_path(
-            Path::new("/music/track.mp3"),
-            Some(Path::new("/music")),
-            Codec::Mp3,
-        )
-        .expect_err("should refuse");
-
-        assert!(error.contains("track.mp3"), "got: {error}");
-    }
-
-    /// ALAC and AAC share .m4a, which is the same ambiguity the reader has to
-    /// cope with — writing it is where the ambiguity starts.
-    #[test]
-    fn the_extension_follows_the_codec() {
-        let cases = [
-            (Codec::Mp3, "mp3"),
-            (Codec::AacLc, "m4a"),
-            (Codec::Alac, "m4a"),
-            (Codec::Flac, "flac"),
-            (Codec::PcmWav, "wav"),
-            (Codec::PcmAiff, "aiff"),
-        ];
-
-        for (codec, expected) in cases {
-            let path = output_path(Path::new("/music/track.wv"), Some(Path::new("/out")), codec)
-                .expect("path");
-            assert_eq!(path.extension().and_then(|e| e.to_str()), Some(expected));
-        }
     }
 
     /// The counter has to overwrite itself rather than scroll, or a folder of
