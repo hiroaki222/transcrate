@@ -7,6 +7,7 @@ use clap::{CommandFactory, Parser, Subcommand, ValueHint};
 use clap_complete::Shell;
 use transcrate_core::convert::ConvertError;
 use transcrate_core::plan::{self, Action, Artwork, MetadataPolicy, Target};
+use transcrate_core::usb;
 use transcrate_core::{
     AudioSpec, Codec, DEVICES, DeviceProfile, FileSystem, Issue, Support, by_id, check, convert,
     probe,
@@ -111,6 +112,31 @@ Examples:
   transcrate retag ~/Music --keep-comment --no-artwork
                                                 Drop the sleeve, keep your notes")]
     Retag(RetagArgs),
+
+    /// Check a drive before you take it to a gig.
+    ///
+    /// Read-only. Nothing here writes to the drive, formats it, or moves a
+    /// file: a tool you point at your set on a Friday evening has no business
+    /// being able to damage it.
+    #[command(after_help = "\
+Examples:
+  transcrate usb /Volumes/DJ                Against every player
+  transcrate usb /Volumes/DJ -d xdj-rr      Against the one in tonight's booth")]
+    Usb {
+        /// The drive, or any path on it.
+        #[arg(value_name = "PATH", value_hint = ValueHint::DirPath)]
+        path: PathBuf,
+
+        /// Players to check against, comma-separated. Defaults to all of them.
+        #[arg(
+            short = 'd',
+            long = "device",
+            value_name = "ID",
+            value_delimiter = ',',
+            value_parser = PossibleValuesParser::new(DEVICES.iter().map(|player| player.id)),
+        )]
+        devices: Vec<String>,
+    },
 
     /// Print a shell completion script.
     ///
@@ -220,6 +246,7 @@ fn main() -> ExitCode {
         } => run_check(&files, &devices, failing, &ffprobe),
         Command::Convert(args) => run_convert(&args),
         Command::Retag(args) => run_retag(&args),
+        Command::Usb { path, devices } => run_usb(&path, &devices),
         Command::Completions { shell } => {
             write_completions(shell, &mut std::io::stdout());
             ExitCode::SUCCESS
@@ -344,6 +371,85 @@ fn run_jobs(
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// Report which players will read a drive.
+///
+/// Exits non-zero when any of the named players will not, so this can gate a
+/// script — and because a drive half the booth cannot read is a problem worth
+/// a failing exit code.
+fn run_usb(path: &Path, device_ids: &[String]) -> ExitCode {
+    let players = match resolve_players(device_ids) {
+        Ok(players) => players,
+        Err(message) => {
+            eprintln!("{message}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    if !path.exists() {
+        eprintln!("{}: no such path", path.display());
+        return ExitCode::FAILURE;
+    }
+
+    let Some(drive) = usb::drive_at(path) else {
+        eprintln!("{}: nothing mounted there", path.display());
+        return ExitCode::FAILURE;
+    };
+
+    println!("{}", drive.mount_point.display());
+
+    let Some(filesystem) = drive.filesystem else {
+        println!("  {} — no player reads this", drive.reported_as);
+        return ExitCode::FAILURE;
+    };
+
+    let name = filesystem_name(filesystem);
+    println!("  {name}\n");
+
+    let split = usb::readers_of(filesystem, DEVICES);
+    let asked_about = |id: &str| players.iter().any(|player| player.id == id);
+
+    let readable: Vec<_> = split
+        .readable
+        .iter()
+        .filter(|player| asked_about(player.id))
+        .map(|player| player.display_name)
+        .collect();
+    if !readable.is_empty() {
+        println!("  reads it       {}", readable.join(", "));
+    }
+
+    let mut refused = 0usize;
+    for (player, support) in &split.unreadable {
+        if !asked_about(player.id) {
+            continue;
+        }
+        refused += 1;
+
+        let verdict = match support {
+            Support::Conflicting => format!("sources disagree about {name}"),
+            Support::Unknown => format!("{name} is undocumented for this player"),
+            _ => format!("does not read {name}"),
+        };
+        println!("  {:<14} {verdict}", player.display_name);
+    }
+
+    if refused == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+fn filesystem_name(filesystem: FileSystem) -> &'static str {
+    match filesystem {
+        FileSystem::Fat16 => "FAT16",
+        FileSystem::Fat32 => "FAT32",
+        FileSystem::ExFat => "exFAT",
+        FileSystem::HfsPlus => "HFS+",
+        FileSystem::Ntfs => "NTFS",
     }
 }
 

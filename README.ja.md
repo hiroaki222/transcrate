@@ -253,6 +253,29 @@ DJ 機材は互いに仕様が食い違っていて, しかもその食い違い
 
 どれか 1 つ外すと, ブースに立ってから気づくことになる.
 
+## USB のチェック
+
+```sh
+transcrate usb /Volumes/DJ
+```
+
+```
+/Volumes/DJ
+  exFAT
+
+  reads it       CDJ-3000X, CDJ-3000, XDJ-AZ, XDJ-AN, XDJ-RX3, OMNIS-DUO, OPUS-QUAD
+  CDJ-2000NXS2   does not read exFAT
+  XDJ-XZ         sources disagree about exFAT
+  XDJ-RR         does not read exFAT
+```
+
+exFAT は何も考えずに選びがちだが, まだ現場に残っている 2 機種が読めなくなる.
+`-d` で実際に挿す機材だけに絞れる. その機材のどれかが読めない場合は非ゼロで
+終了する.
+
+**読み取り専用.** ドライブへの書き込み, フォーマット, ファイルの移動は一切
+行わない. 金曜の夜に自分のセットへ向けるツールが, それを壊せる必要はない.
+
 ## データの出どころ
 
 表の数値はすべてメーカーの説明書から取っている. 根拠とした文書の型番は

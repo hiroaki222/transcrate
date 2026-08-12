@@ -9,6 +9,7 @@ pub mod convert;
 pub mod device;
 pub mod plan;
 pub mod probe;
+pub mod usb;
 
 pub use compat::{AudioSpec, Issue, check};
 pub use device::{
