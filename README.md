@@ -59,7 +59,7 @@ shows a plain no, because that is not something you can settle in a booth.
 ## The app
 
 [Download it](https://github.com/hiroaki222/transcrate/releases/latest), open
-it, and drop a folder on the window.
+it, and drag tracks or a folder onto it.
 
 Neither build is signed with a paid certificate — Apple's costs $99 a year,
 which is hard to justify before anyone is using this — so both systems warn the
@@ -72,6 +72,9 @@ Three screens:
 - **CONVERT** — each row says what the file is, what it would become, and ten
   lights: one per player, green where it plays and hatched red where it will
   not. A second row shows the verdict after conversion.
+
+  ![Each track with its verdict now and after converting](docs/images/convert.png)
+
 - **USB CHECK** — point it at a drive and see which players will read it.
   Read-only, and there is no format button.
 
