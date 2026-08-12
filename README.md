@@ -345,6 +345,9 @@ None cut yet, but tagging one builds and attaches:
 - **The command line** — an archive per platform, holding one binary. This one
   expects ffmpeg on your PATH.
 
+Apple silicon only on macOS. The last Intel Mac shipped in 2020, and building
+for one costs a second ffmpeg and a universal bundle.
+
 Both are unsigned. An Apple developer certificate costs $99 a year, which is
 hard to justify before anyone is using this. macOS blocks an unsigned app the
 first time it is opened, and Apple documents the way through: [Open a Mac app

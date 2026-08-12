@@ -51,22 +51,24 @@ jobs:
           set -euo pipefail
 
           case "$GITHUB_REF_NAME" in
-            *-alpha*|*-beta*|*-rc*) pre=--prerelease ;;
-            *)                      pre= ;;
+            *-alpha*|*-beta*|*-rc*) pre=true ;;
+            *)                      pre=false ;;
           esac
 
-          gh release create "$GITHUB_REF_NAME" \
-            --draft $pre \
-            --title "$GITHUB_REF_NAME" \
-            --notes-file release-body.md
-
-          # tauri-action wants the numeric id. Handed the tag instead it
-          # uploads nowhere and still reports success, which is how the first
-          # run produced a green bundle job and an empty release.
+          # Created through the API rather than `gh release create`, because
+          # the numeric id comes back in the response. Reading it afterwards
+          # from the list endpoint raced the release into existence and came
+          # back empty. tauri-action needs that id: handed anything else it
+          # uploads nowhere and still reports success.
           id="$(gh api "repos/$GITHUB_REPOSITORY/releases" \
-                 --jq ".[] | select(.tag_name == \"$GITHUB_REF_NAME\") | .id")"
-          test -n "$id"
+            -f "tag_name=$GITHUB_REF_NAME" \
+            -f "name=$GITHUB_REF_NAME" \
+            -F "body=@release-body.md" \
+            -F draft=true \
+            -F "prerelease=$pre" \
+            --jq .id)"
 
+          test -n "$id"
           echo "id=$id" >> "$GITHUB_OUTPUT"
 
   # Nothing publishes an LGPL ffmpeg for macOS, so one is built here. GPL-only
@@ -186,14 +188,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Apple silicon only. Intel Macs are not a target: the last one
+          # shipped in 2020, and building for them costs a second ffmpeg and a
+          # universal bundle for a machine nobody is buying.
           - os: macos-latest
             target: aarch64-apple-darwin
-          # Cross-compiled from Apple silicon rather than built on macos-13.
-          # That runner is being retired and the job sat unscheduled long
-          # enough to hold the whole release open; the SDK carries both
-          # architectures, so nothing is lost by not being on one.
-          - os: macos-latest
-            target: x86_64-apple-darwin
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
           - os: windows-latest
