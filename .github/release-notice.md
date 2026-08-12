@@ -1,7 +1,7 @@
 > [!IMPORTANT]
 > ### Which file
 >
-> The downloads are under **Assets**, below this. Open it and take:
+> The downloads are under **Assets**, below this. Take:
 >
 > **macOS** — the one ending in **`.dmg`**. Apple silicon only.
 > **Windows** — the one ending in **`.exe`**.
@@ -21,7 +21,7 @@
 >
 > **macOS** — System Settings → Privacy & Security → scroll to the bottom →
 > **Open Anyway** → enter your password.
-> [The macOS steps](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac)
+> [The official macOS instructions](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac)
 >
 > **Windows** — On the blue warning, click **More info** → **Run anyway**.
 >
@@ -29,7 +29,7 @@
 >
 > ### どれをダウンロードすればいいか
 >
-> ファイルはこの下の **Assets** の中にあります. 開いて, 次のものを選んでください.
+> ファイルはこの下の **Assets** にあります. 次のものを選んでください.
 >
 > **macOS** — 拡張子が **`.dmg`** のもの. Apple Silicon 専用です.
 > **Windows** — 拡張子が **`.exe`** のもの.
@@ -49,6 +49,6 @@
 >
 > **macOS** — システム設定 → プライバシーとセキュリティ → 一番下までスクロール
 > → **「このまま開く」** → パスワードを入力.
-> [macOS の手順](https://support.apple.com/ja-jp/guide/mac-help/mh40616/mac)
+> [macOS 公式の手順](https://support.apple.com/ja-jp/guide/mac-help/mh40616/mac)
 >
 > **Windows** — 青い警告画面で **「詳細情報」** → **「実行」** の順にクリック.
