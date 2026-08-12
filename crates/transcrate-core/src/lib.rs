@@ -8,6 +8,7 @@ pub mod compat;
 pub mod convert;
 pub mod device;
 pub mod files;
+pub mod parallel;
 pub mod plan;
 pub mod probe;
 pub mod usb;

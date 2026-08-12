@@ -9,6 +9,7 @@ mod tools;
 mod view;
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -16,7 +17,7 @@ use tauri::{AppHandle, Emitter};
 use transcrate_core::device::{self, DeviceProfile};
 use transcrate_core::files::{self, PreviousOutput};
 use transcrate_core::plan::{Action, MetadataPolicy, Target};
-use transcrate_core::{convert, usb};
+use transcrate_core::{convert, parallel, usb};
 
 use view::{DeviceRow, Drive, Lamp, Progress, Tools, Track};
 
@@ -133,18 +134,32 @@ fn examine(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec
     let players = settings.players()?;
     let inputs = gather(paths, PreviousOutput::Skip);
 
-    let mut tracks = Vec::with_capacity(inputs.len());
+    let done = AtomicUsize::new(0);
+    let prepared = convert::prepare_all(
+        &inputs,
+        None,
+        &tool(FFPROBE),
+        &|_| target,
+        parallel::default_concurrency(),
+        &|index, _| {
+            report(
+                app,
+                "inspect",
+                done.fetch_add(1, Ordering::Relaxed) + 1,
+                inputs.len(),
+                &inputs[index],
+            );
+        },
+    );
 
-    for (done, input) in inputs.iter().enumerate() {
-        report(app, "inspect", done, inputs.len(), input);
-
-        tracks.push(
-            match convert::prepare(input, None, &tool(FFPROBE), &|_| target) {
-                Ok(job) => describe(input, &job, &players),
-                Err(error) => Track::unreadable(input, error.to_string()),
-            },
-        );
-    }
+    let tracks = inputs
+        .iter()
+        .zip(prepared)
+        .map(|(input, outcome)| match outcome {
+            Ok(job) => describe(input, &job, &players),
+            Err(error) => Track::unreadable(input, error.to_string()),
+        })
+        .collect();
 
     report(app, "inspect", inputs.len(), inputs.len(), Path::new(""));
     Ok(tracks)
@@ -182,11 +197,21 @@ fn encode(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<
     let target = settings.target()?;
     let inputs = gather(paths, PreviousOutput::Skip);
 
+    let concurrency = parallel::default_concurrency();
+    let prepared = convert::prepare_all(
+        &inputs,
+        None,
+        &tool(FFPROBE),
+        &|_| target,
+        concurrency,
+        &|_, _| {},
+    );
+
     let mut jobs = Vec::new();
     let mut failures = Vec::new();
 
-    for input in &inputs {
-        match convert::prepare(input, None, &tool(FFPROBE), &|_| target) {
+    for (input, outcome) in inputs.iter().zip(prepared) {
+        match outcome {
             Ok(job) => jobs.push(job),
             Err(error) => failures.push(Outcome {
                 path: input.display().to_string(),
@@ -204,12 +229,7 @@ fn encode(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<
         }
     };
 
-    let results = convert::run_all(
-        &tool(FFMPEG),
-        &jobs,
-        convert::default_concurrency(),
-        &finished,
-    );
+    let results = convert::run_all(&tool(FFMPEG), &jobs, concurrency, &finished);
 
     let mut outcomes: Vec<_> = jobs
         .iter()

@@ -15,7 +15,7 @@ use transcrate_core::device::Codec;
 use transcrate_core::plan::{
     self, Action, Artwork, BitDepthPolicy, MetadataPolicy, SampleRatePolicy, Target,
 };
-use transcrate_core::{convert, files, probe};
+use transcrate_core::{convert, files, parallel, probe};
 
 /// Convert `input` by `plan` and read back what landed on disk.
 fn convert_and_probe(plan: &plan::Plan, input: &Path, output: &Path) -> AudioSpec {
@@ -200,7 +200,7 @@ fn all_jobs_run_whatever_the_concurrency() {
 
 #[test]
 fn the_default_concurrency_is_at_least_one() {
-    assert!(convert::default_concurrency() >= 1);
+    assert!(parallel::default_concurrency() >= 1);
 }
 
 /// A folder of a hundred tracks must not sit silent until the last one lands.

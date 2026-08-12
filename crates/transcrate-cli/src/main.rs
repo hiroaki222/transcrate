@@ -11,7 +11,7 @@ use transcrate_core::plan::{Action, Artwork, MetadataPolicy, Target};
 use transcrate_core::usb;
 use transcrate_core::{
     AudioSpec, Codec, DEVICES, DeviceProfile, FileSystem, Issue, Support, by_id, check, convert,
-    probe,
+    parallel, probe,
 };
 
 /// Shown under the top-level help. Someone reading `-h` for the first time
@@ -329,9 +329,10 @@ fn run_jobs(
     into: Option<&Path>,
     concurrency: Option<usize>,
     tools: (&Path, &Path),
-    target_for: &dyn Fn(&AudioSpec) -> Target,
+    target_for: &(dyn Fn(&AudioSpec) -> Target + Sync),
 ) -> ExitCode {
     let (ffmpeg, ffprobe) = tools;
+    let concurrency = concurrency.unwrap_or_else(parallel::default_concurrency);
 
     // Plan everything before encoding anything, so a file that cannot be read
     // is named straight away rather than after minutes of work on the rest.
@@ -341,11 +342,13 @@ fn run_jobs(
         return ExitCode::FAILURE;
     }
 
+    let prepared = convert::prepare_all(&inputs, into, ffprobe, target_for, concurrency, &|_, _| {});
+
     let mut planned = Vec::new();
     let mut all_done = true;
 
-    for input in &inputs {
-        match convert::prepare(input, into, ffprobe, target_for) {
+    for outcome in prepared {
+        match outcome {
             Ok(job) => planned.push(job),
             Err(error) => {
                 eprintln!("{error}");
@@ -360,7 +363,7 @@ fn run_jobs(
     let results = convert::run_all(
         ffmpeg,
         &planned,
-        concurrency.unwrap_or_else(convert::default_concurrency),
+        concurrency,
         &|index, result| {
             let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
             report_one(finished, total, &planned[index], result);
@@ -582,16 +585,24 @@ fn run_check(
         return ExitCode::FAILURE;
     }
 
+    let progress = Progress::new(inputs.len());
+    let done = AtomicUsize::new(0);
+
+    // Read every file first, then report. Probing is one process per file and
+    // parallelises; the report has to stay in the order the files were given.
+    let specs = parallel::map(
+        &inputs,
+        parallel::default_concurrency(),
+        &|_, file| probe::run(ffprobe, file),
+        &|_, _| progress.show(done.fetch_add(1, Ordering::Relaxed) + 1),
+    );
+
+    progress.clear();
+
     let mut all_clear = true;
     let mut rejected_count = 0usize;
-    let progress = Progress::new(inputs.len());
 
-    for (index, file) in inputs.iter().enumerate() {
-        progress.show(index + 1);
-        let outcome = probe::run(ffprobe, file);
-        // Anything printed has to appear above the counter, not through it.
-        progress.clear();
-
+    for (file, outcome) in inputs.iter().zip(specs) {
         match outcome {
             Ok(spec) => {
                 let failing = rejected_anywhere(&spec, &players);
