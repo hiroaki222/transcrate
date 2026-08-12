@@ -254,6 +254,30 @@ DJ gear disagrees with itself, and not in ways you can guess:
 
 Get one of these wrong and you find out in the booth.
 
+## Checking a drive
+
+```sh
+transcrate usb /Volumes/DJ
+```
+
+```
+/Volumes/DJ
+  exFAT
+
+  reads it       CDJ-3000X, CDJ-3000, XDJ-AZ, XDJ-AN, XDJ-RX3, OMNIS-DUO, OPUS-QUAD
+  CDJ-2000NXS2   does not read exFAT
+  XDJ-XZ         sources disagree about exFAT
+  XDJ-RR         does not read exFAT
+```
+
+Formatting a stick exFAT is the easy default and it locks out two players that
+are still in plenty of booths. `-d` narrows it to the gear you are actually
+plugging into, and it exits non-zero if any of those will not read the drive.
+
+**Read-only.** Nothing here writes to a drive, formats one or moves a file. A
+tool you point at your set on a Friday evening has no business being able to
+damage it.
+
 ## Where the numbers come from
 
 Every figure is from a manufacturer's manual, with the document number recorded
