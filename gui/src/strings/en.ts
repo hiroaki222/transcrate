@@ -5,27 +5,33 @@ export const en: Strings = {
   profiles: {
     "cdj-safe": {
       label: "Plays on everything",
-      note: "MP3 320 kbps / 44.1 kHz. Every one of the 10 supported players will read it.",
+      format: "MP3  320 kbps  44.1 kHz",
+      note: "Every one of the 10 supported players will read it.",
     },
     lossless: {
-      label: "Lossless, still plays on everything",
-      note: "AIFF up to 48 kHz / 24 bit. Nothing is thrown away, and all 10 players read it.",
+      label: "Lossless, plays on everything",
+      format: "AIFF  up to 48 kHz  24 bit",
+      note: "Nothing is thrown away, and all 10 players still read it.",
     },
     archive: {
       label: "Keep a copy (no playback promise)",
-      note: "FLAC at the source's own rate and depth. Players may refuse it.",
+      format: "FLAC  source rate and depth",
+      note: "Players may refuse it.",
     },
     aiff: {
-      label: "AIFF (container only)",
-      note: "Rate and bit depth stay as they are, so some players will refuse it.",
+      label: "Convert to AIFF",
+      format: "AIFF  source rate and depth",
+      note: "Some players will refuse it.",
     },
     wav: {
-      label: "WAV (container only)",
-      note: "Rate and bit depth stay as they are, so some players will refuse it.",
+      label: "Convert to WAV",
+      format: "WAV  source rate and depth",
+      note: "Some players will refuse it.",
     },
     flac: {
-      label: "FLAC (container only)",
-      note: "Rate and bit depth stay as they are, so some players will refuse it.",
+      label: "Convert to FLAC",
+      format: "FLAC  source rate and depth",
+      note: "Some players will refuse it.",
     },
   },
 

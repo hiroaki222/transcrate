@@ -40,6 +40,7 @@ export function TargetPicker({ profile, onChange }: Props) {
         <span className="card-dot" />
         <span className="card-text">
           <span className="card-label">{option.label}</span>
+          <span className="card-format">{option.format}</span>
           <span className="card-note">{option.note}</span>
         </span>
         <span className="card-id">{id}</span>

@@ -5,29 +5,35 @@ export const ja = {
   profiles: {
     "cdj-safe": {
       label: "現場で確実に再生",
-      note: "MP3 320 kbps / 44.1 kHz。対応する10機種すべてで再生できます。",
+      format: "MP3  320 kbps  44.1 kHz",
+      note: "対応する10機種すべてで再生できます。",
     },
     lossless: {
       label: "音質を保って現場で再生",
-      note: "AIFF 最大48 kHz / 24 bit。音質を落とさずに、10機種すべてで再生できます。",
+      format: "AIFF  最大 48 kHz  24 bit",
+      note: "音質を落とさずに、10機種すべてで再生できます。",
     },
     archive: {
       label: "保存用（再生保証なし）",
-      note: "FLAC。元の音質のまま残します。機材で再生できるとは限りません。",
+      format: "FLAC  元のレートと深度のまま",
+      note: "機材で再生できるとは限りません。",
     },
     aiff: {
-      label: "AIFFに変換（形式のみ）",
-      note: "サンプルレートとビット深度は元のまま。機材によっては再生できません。",
+      label: "AIFFに変換",
+      format: "AIFF  元のレートと深度のまま",
+      note: "機材によっては再生できません。",
     },
     wav: {
-      label: "WAVに変換（形式のみ）",
-      note: "サンプルレートとビット深度は元のまま。機材によっては再生できません。",
+      label: "WAVに変換",
+      format: "WAV  元のレートと深度のまま",
+      note: "機材によっては再生できません。",
     },
     flac: {
-      label: "FLACに変換（形式のみ）",
-      note: "サンプルレートとビット深度は元のまま。機材によっては再生できません。",
+      label: "FLACに変換",
+      format: "FLAC  元のレートと深度のまま",
+      note: "機材によっては再生できません。",
     },
-  } as Record<string, { label: string; note: string }>,
+  } as Record<string, { label: string; format: string; note: string }>,
 
   settings: {
     open: "設定",
