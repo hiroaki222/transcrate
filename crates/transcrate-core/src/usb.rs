@@ -37,11 +37,11 @@ pub struct Drive {
 /// Returns `None` when nothing is mounted there, which on a Mac usually means
 /// the stick was ejected between plugging it in and asking about it.
 pub fn drive_at(path: &Path) -> Option<Drive> {
-    // Every path starts with `/`, so a mistyped one matches the root mount and
-    // would come back described as the machine's own disk.
-    if !path.exists() {
-        return None;
-    }
+    // Mount points are absolute, and what someone types rarely is: `KOMORI`
+    // from inside /Volumes, a `..`, a symlink. Resolving first also rules out
+    // a path that is not there — without that, every mistyped name matches the
+    // root mount and comes back described as the machine's own disk.
+    let path = path.canonicalize().ok()?;
 
     let disks = sysinfo::Disks::new_with_refreshed_list();
 
@@ -142,6 +142,25 @@ mod tests {
         );
 
         assert_eq!(drive_at(missing), None);
+    }
+
+    /// Mount points are always absolute, and a path typed at a shell is often
+    /// not: `transcrate usb KOMORI` from inside /Volumes is the obvious way to
+    /// ask, and comparing it against `/Volumes/KOMORI` unresolved finds
+    /// nothing.
+    #[test]
+    fn a_relative_path_still_finds_its_drive() {
+        // Tests run from the crate root, so this exists and is relative.
+        let relative = std::path::Path::new("src");
+        assert!(
+            relative.exists() && relative.is_relative(),
+            "the test needs a relative path that exists"
+        );
+
+        assert!(
+            drive_at(relative).is_some(),
+            "a relative path found no drive"
+        );
     }
 
     /// The split is the whole point: which machines in the booth will read this
