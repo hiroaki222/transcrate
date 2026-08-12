@@ -340,8 +340,8 @@ Next:
 
 None cut yet, but tagging one builds and attaches:
 
-- **The window** — a `.dmg` for Apple silicon and an `.msi` for Windows, each
-  carrying its own ffmpeg so nothing has to be installed first.
+- **The window** — a `.dmg` for Apple silicon and an `.exe` installer for
+  Windows, each carrying its own ffmpeg so nothing has to be installed first.
 - **The command line** — an archive per platform, holding one binary. This one
   expects ffmpeg on your PATH.
 
