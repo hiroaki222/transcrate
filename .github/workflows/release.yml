@@ -25,27 +25,17 @@ jobs:
           # git-cliff reads the whole history to work out what this tag added.
           fetch-depth: 0
 
-      # Fetched here rather than through the action, which gave up after five
-      # attempts on a bad connection and took the whole release with it. A
-      # release should not die because a download flaked, and it should not
-      # quietly go out without notes either — so this retries, and still fails
-      # if it never lands.
+      # Fetched here rather than through the action, which gave up on a bad
+      # connection and took the whole release with it.
       - name: Fetch git-cliff
         run: |
           set -euo pipefail
           version=2.13.1
           name="git-cliff-$version-x86_64-unknown-linux-gnu"
 
-          for attempt in 1 2 3 4 5; do
-            if curl -fsSL --retry 3 --retry-all-errors --connect-timeout 20 \
-                 -o cliff.tar.gz \
-                 "https://github.com/orhun/git-cliff/releases/download/v$version/$name.tar.gz"
-            then
-              break
-            fi
-            echo "attempt $attempt failed"
-            sleep $((attempt * 10))
-          done
+          bash .github/scripts/fetch.sh \
+            "https://github.com/orhun/git-cliff/releases/download/v$version/$name.tar.gz" \
+            cliff.tar.gz
 
           tar -xzf cliff.tar.gz
           find . -type f -name git-cliff -exec mv {} ./git-cliff \;
@@ -177,8 +167,9 @@ jobs:
               done
               ;;
             Windows)
-              curl -fsSL -o ffmpeg.zip \
-                https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip
+              bash "$GITHUB_WORKSPACE/.github/scripts/fetch.sh" \
+                https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip \
+                ffmpeg.zip
               unzip -q ffmpeg.zip
               for tool in ffmpeg ffprobe; do
                 find . -name "$tool.exe" -exec mv {} "$tool-${{ matrix.target }}.exe" \;
