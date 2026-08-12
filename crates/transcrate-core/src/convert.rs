@@ -7,7 +7,10 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 
-use crate::plan::{Action, Plan, encode_args};
+use crate::compat::AudioSpec;
+use crate::files::{self, PathError};
+use crate::plan::{Action, Plan, Target, encode_args};
+use crate::probe::{self, ProbeError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConvertError {
@@ -23,6 +26,59 @@ pub enum ConvertError {
         #[source]
         source: std::io::Error,
     },
+    #[error("could not create {directory}: {source}")]
+    NoOutputFolder {
+        directory: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+/// Why a file could not be turned into a job, before any of it ran.
+#[derive(Debug, thiserror::Error)]
+pub enum PrepareError {
+    #[error("{path}: {source}")]
+    Unreadable {
+        path: PathBuf,
+        #[source]
+        source: ProbeError,
+    },
+    #[error("{0}")]
+    Destination(#[from] PathError),
+}
+
+/// Work out what would happen to `input`, without doing any of it.
+///
+/// Read-only on purpose. This is what a preview calls, and someone looking at a
+/// list of what a conversion *would* produce has not agreed to anything landing
+/// on their disk yet — not even an empty folder.
+///
+/// `target_for` is handed the source so a target can be built from the file
+/// itself, which is what lets one run cover a folder of mixed formats.
+///
+/// # Errors
+///
+/// Fails when ffprobe cannot read the file, and when the result would have
+/// nowhere to go.
+pub fn prepare(
+    input: &Path,
+    into: Option<&Path>,
+    ffprobe: &Path,
+    target_for: &dyn Fn(&AudioSpec) -> Target,
+) -> Result<Job, PrepareError> {
+    let source = probe::run(ffprobe, input).map_err(|source| PrepareError::Unreadable {
+        path: input.to_path_buf(),
+        source,
+    })?;
+
+    let plan = crate::plan::plan(&source, &target_for(&source));
+    let output = files::output_path(input, into, plan.output.codec)?;
+
+    Ok(Job {
+        plan,
+        input: input.to_path_buf(),
+        output,
+    })
 }
 
 /// Carry out `plan`, writing to `output`.
@@ -35,6 +91,15 @@ pub enum ConvertError {
 /// Fails when ffmpeg cannot be started, when it rejects the conversion, or when
 /// a copy cannot be written.
 pub fn run(ffmpeg: &Path, plan: &Plan, input: &Path, output: &Path) -> Result<(), ConvertError> {
+    // Made here rather than when the job was worked out, so that previewing a
+    // library leaves no trace of a conversion nobody asked for.
+    if let Some(directory) = output.parent() {
+        std::fs::create_dir_all(directory).map_err(|source| ConvertError::NoOutputFolder {
+            directory: directory.to_path_buf(),
+            source,
+        })?;
+    }
+
     match plan.action {
         Action::Copy => std::fs::copy(input, output)
             .map(|_| ())

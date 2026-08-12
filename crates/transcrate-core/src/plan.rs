@@ -63,6 +63,19 @@ impl MetadataPolicy {
         artwork: Artwork::Keep,
     };
 
+    /// The same policy, but leaving the artwork behind.
+    ///
+    /// Kept as an operation on a policy rather than as four named constants,
+    /// because the artwork choice and the comment choice are independent and
+    /// naming every combination hides that.
+    #[must_use]
+    pub const fn without_artwork(self) -> Self {
+        Self {
+            artwork: Artwork::Remove,
+            ..self
+        }
+    }
+
     /// Whether applying this would change a file at all.
     ///
     /// Keeping the artwork and clearing nothing leaves the bytes as they were,
@@ -195,6 +208,10 @@ pub enum Action {
 /// What one file's conversion will produce, and how.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct Plan {
+    /// What the file is now. Carried along so that anything reporting a plan —
+    /// a line of terminal output, a row in a window — can say what changed
+    /// without probing the file a second time.
+    pub source: AudioSpec,
     pub output: AudioSpec,
     pub action: Action,
     pub metadata: MetadataPolicy,
@@ -215,6 +232,7 @@ pub fn plan(source: &AudioSpec, target: &Target) -> Plan {
     };
 
     Plan {
+        source: *source,
         output,
         action,
         metadata: target.metadata,
@@ -734,6 +752,17 @@ mod tests {
             args.iter().any(|arg| arg.contains("Album cover")),
             "artwork stream is not labelled: {args:?}"
         );
+    }
+
+    /// The artwork choice and the comment choice are independent, so dropping
+    /// a sleeve must not quietly change what happens to the text.
+    #[test]
+    fn removing_artwork_leaves_the_tag_fields_alone() {
+        let policy = MetadataPolicy::DJ;
+        let without = policy.without_artwork();
+
+        assert_eq!(without.artwork, Artwork::Remove);
+        assert_eq!(without.clear, policy.clear);
     }
 
     /// Plenty of people keep their own cue notes or a Camelot key in the

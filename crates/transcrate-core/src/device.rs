@@ -94,6 +94,9 @@ pub struct DeviceProfile {
     /// Stable kebab-case key used in profiles and on the command line.
     pub id: &'static str,
     pub display_name: &'static str,
+    /// The name that fits in a status lamp, where ten of these sit side by
+    /// side. `CDJ-2000NXS2` at that width is unreadable; `NXS2` is not.
+    pub lamp_name: &'static str,
     pub release_year: u16,
     pub formats: &'static [FormatSupport],
     pub filesystems: &'static [(FileSystem, Support)],
@@ -260,6 +263,7 @@ pub const DEVICES: &[DeviceProfile] = &[
     DeviceProfile {
         id: "cdj-3000x",
         display_name: "CDJ-3000X",
+        lamp_name: "3000X",
         release_year: 2025,
         formats: FORMATS_HIRES,
         filesystems: FS_WITH_EXFAT,
@@ -270,6 +274,7 @@ pub const DEVICES: &[DeviceProfile] = &[
     DeviceProfile {
         id: "cdj-3000",
         display_name: "CDJ-3000",
+        lamp_name: "3000",
         release_year: 2020,
         formats: FORMATS_HIRES,
         filesystems: FS_WITH_EXFAT,
@@ -280,6 +285,7 @@ pub const DEVICES: &[DeviceProfile] = &[
     DeviceProfile {
         id: "cdj-2000nxs2",
         display_name: "CDJ-2000NXS2",
+        lamp_name: "NXS2",
         release_year: 2016,
         formats: FORMATS_NXS2,
         filesystems: FS_NO_EXFAT,
@@ -290,6 +296,7 @@ pub const DEVICES: &[DeviceProfile] = &[
     DeviceProfile {
         id: "xdj-az",
         display_name: "XDJ-AZ",
+        lamp_name: "AZ",
         release_year: 2025,
         formats: FORMATS_HIRES,
         filesystems: FS_WITH_EXFAT,
@@ -300,6 +307,7 @@ pub const DEVICES: &[DeviceProfile] = &[
     DeviceProfile {
         id: "xdj-an",
         display_name: "XDJ-AN",
+        lamp_name: "AN",
         release_year: 2026,
         formats: FORMATS_LOSSLESS_48K,
         filesystems: FS_WITH_EXFAT,
@@ -310,6 +318,7 @@ pub const DEVICES: &[DeviceProfile] = &[
     DeviceProfile {
         id: "xdj-xz",
         display_name: "XDJ-XZ",
+        lamp_name: "XZ",
         release_year: 2019,
         formats: FORMATS_FLAC_NO_ALAC,
         filesystems: FS_EXFAT_DISPUTED,
@@ -320,6 +329,7 @@ pub const DEVICES: &[DeviceProfile] = &[
     DeviceProfile {
         id: "xdj-rx3",
         display_name: "XDJ-RX3",
+        lamp_name: "RX3",
         release_year: 2021,
         formats: FORMATS_FLAC_NO_ALAC,
         filesystems: FS_WITH_EXFAT,
@@ -330,6 +340,7 @@ pub const DEVICES: &[DeviceProfile] = &[
     DeviceProfile {
         id: "xdj-rr",
         display_name: "XDJ-RR",
+        lamp_name: "RR",
         release_year: 2018,
         formats: FORMATS_PCM_ONLY,
         filesystems: FS_NO_EXFAT,
@@ -340,6 +351,7 @@ pub const DEVICES: &[DeviceProfile] = &[
     DeviceProfile {
         id: "omnis-duo",
         display_name: "OMNIS-DUO",
+        lamp_name: "DUO",
         release_year: 2024,
         formats: FORMATS_LOSSLESS_48K,
         filesystems: FS_WITH_EXFAT,
@@ -350,6 +362,7 @@ pub const DEVICES: &[DeviceProfile] = &[
     DeviceProfile {
         id: "opus-quad",
         display_name: "OPUS-QUAD",
+        lamp_name: "QUAD",
         release_year: 2023,
         formats: FORMATS_HIRES,
         filesystems: FS_WITH_EXFAT,
@@ -367,6 +380,26 @@ mod tests {
     /// all-in-ones, newest first inside each group, portable and four-channel
     /// units last. Pinning it here means a device added in the wrong place
     /// fails rather than quietly reordering everyone's output.
+    /// Ten of these sit side by side in a status strip, so each has to be
+    /// short enough to read at a glance and distinct from the other nine.
+    #[test]
+    fn every_lamp_name_is_short_and_unique() {
+        let mut seen = std::collections::HashSet::new();
+
+        for device in DEVICES {
+            assert!(
+                device.lamp_name.len() <= 5,
+                "{} is too long for a lamp",
+                device.lamp_name
+            );
+            assert!(
+                seen.insert(device.lamp_name),
+                "{} is used twice",
+                device.lamp_name
+            );
+        }
+    }
+
     #[test]
     fn devices_are_listed_in_the_intended_order() {
         let ids: Vec<_> = DEVICES.iter().map(|device| device.id).collect();
