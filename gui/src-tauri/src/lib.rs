@@ -5,10 +5,10 @@
 //! ffmpeg on a worker thread and hands the answers over. Keeping it that thin
 //! is what stops the window and the command line from drifting apart.
 
+mod tools;
 mod view;
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -79,17 +79,18 @@ pub(crate) struct Outcome {
 const FFMPEG: &str = "ffmpeg";
 const FFPROBE: &str = "ffprobe";
 
+/// Where a tool is, preferring the copy shipped beside the app.
+fn tool(name: &str) -> PathBuf {
+    tools::locate(tools::alongside().as_deref(), name)
+}
+
 /// Whether the two binaries every conversion needs can be run.
 #[tauri::command]
 fn tools() -> Tools {
     Tools {
-        ffmpeg: runnable(FFMPEG),
-        ffprobe: runnable(FFPROBE),
+        ffmpeg: tools::runnable(&tool(FFMPEG)),
+        ffprobe: tools::runnable(&tool(FFPROBE)),
     }
-}
-
-fn runnable(tool: &str) -> bool {
-    Command::new(tool).arg("-version").output().is_ok()
 }
 
 /// The language the machine is set to, as a BCP 47 tag such as `ja-JP`.
@@ -138,7 +139,7 @@ fn examine(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec
         report(app, "inspect", done, inputs.len(), input);
 
         tracks.push(
-            match convert::prepare(input, None, Path::new(FFPROBE), &|_| target) {
+            match convert::prepare(input, None, &tool(FFPROBE), &|_| target) {
                 Ok(job) => describe(input, &job, &players),
                 Err(error) => Track::unreadable(input, error.to_string()),
             },
@@ -185,7 +186,7 @@ fn encode(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<
     let mut failures = Vec::new();
 
     for input in &inputs {
-        match convert::prepare(input, None, Path::new(FFPROBE), &|_| target) {
+        match convert::prepare(input, None, &tool(FFPROBE), &|_| target) {
             Ok(job) => jobs.push(job),
             Err(error) => failures.push(Outcome {
                 path: input.display().to_string(),
@@ -204,7 +205,7 @@ fn encode(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<
     };
 
     let results = convert::run_all(
-        Path::new(FFMPEG),
+        &tool(FFMPEG),
         &jobs,
         convert::default_concurrency(),
         &finished,
