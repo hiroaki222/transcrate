@@ -7,9 +7,18 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  release:
+  # The draft is made first so every other job has somewhere to upload to, and
+  # it stays a draft until they have. A release that appears with the notes but
+  # without the downloads reads as a broken release for as long as the builds
+  # take.
+  draft:
     runs-on: ubuntu-latest
+    outputs:
+      id: ${{ steps.create.outputs.id }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,10 +41,178 @@ jobs:
           printf '%s\n\n' "$CHANGES" > release-body.md
           cat .github/release-notice.md >> release-body.md
 
-      - name: Publish
+      - name: Open a draft
+        id: create
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
+            --draft \
             --title "$GITHUB_REF_NAME" \
             --notes-file release-body.md
+          echo "id=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+  # Nothing publishes an LGPL ffmpeg for macOS, so one is built here. GPL-only
+  # components are left out on purpose: this program is MIT or Apache-2.0, and
+  # shipping a GPL build inside the same bundle would carry GPL obligations
+  # into it. An LGPL build covers every format Transcrate writes.
+  ffmpeg-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the build
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ffmpeg-out
+          key: ffmpeg-lgpl-macos-${{ hashFiles('.github/scripts/build-ffmpeg-macos.sh') }}
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: bash .github/scripts/build-ffmpeg-macos.sh ffmpeg-out
+
+      - name: Check the licence held
+        run: |
+          ./ffmpeg-out/ffmpeg -version | head -2
+          # A GPL component here would mean the configure flags did not hold,
+          # and the bundle would carry obligations this project does not accept.
+          ! ./ffmpeg-out/ffmpeg -version | grep -q -- --enable-gpl
+
+      # The suite runs real conversions, so pointing it at this build is the
+      # only thing that proves `--disable-everything` did not cut something the
+      # app needs. Without it the binary that ships would be one nothing has
+      # ever encoded with.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Convert with it
+        run: |
+          export PATH="$PWD/ffmpeg-out:$PATH"
+          ffmpeg -version | head -1
+          cargo test -p transcrate-core --test convert_real_files --test probe_real_files
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-macos
+          path: ffmpeg-out/*
+
+  bundle:
+    needs: [draft, ffmpeg-macos]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: ffmpeg-macos
+          path: ffmpeg-in
+
+      # Tauri looks for a sidecar named after the target triple and drops the
+      # suffix when it bundles.
+      - name: Put ffmpeg where Tauri expects it
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p gui/src-tauri/binaries
+          cd gui/src-tauri/binaries
+
+          case "${{ runner.os }}" in
+            macOS)
+              for tool in ffmpeg ffprobe; do
+                mv "$GITHUB_WORKSPACE/ffmpeg-in/$tool" "$tool-${{ matrix.target }}"
+                chmod +x "$tool-${{ matrix.target }}"
+              done
+              ;;
+            Windows)
+              curl -fsSL -o ffmpeg.zip \
+                https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip
+              unzip -q ffmpeg.zip
+              for tool in ffmpeg ffprobe; do
+                find . -name "$tool.exe" -exec mv {} "$tool-${{ matrix.target }}.exe" \;
+              done
+              rm -rf ffmpeg.zip ffmpeg-*-win64-lgpl
+              ;;
+          esac
+
+          ls -la
+
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+
+      - run: bun install --frozen-lockfile
+        working-directory: gui
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          projectPath: gui
+          releaseId: ${{ needs.draft.outputs.id }}
+          args: --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json
+
+  # The command line is a single file and wants no installer, so it ships as a
+  # plain archive per platform.
+  cli:
+    needs: draft
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo build --release --locked -p transcrate-cli --target ${{ matrix.target }}
+
+      - name: Pack it
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="transcrate-$GITHUB_REF_NAME-${{ matrix.target }}"
+          out="target/${{ matrix.target }}/release"
+
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "$name.zip" "./$out/transcrate.exe" LICENSE-MIT LICENSE-APACHE README.md
+          else
+            tar -czf "$name.tar.gz" -C "$out" transcrate \
+              -C "$GITHUB_WORKSPACE" LICENSE-MIT LICENSE-APACHE README.md
+          fi
+
+      - name: Upload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" transcrate-*.tar.gz transcrate-*.zip --clobber
+
+  publish:
+    needs: [bundle, cli]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Take it out of draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false
