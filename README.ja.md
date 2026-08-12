@@ -44,13 +44,16 @@ CDJ-2000NXS2   2016     48k   48k    96k    96k    96k    96k  no
 
 ## アプリ
 
-[ダウンロード](https://github.com/hiroaki222/transcrate/releases/latest)して開き、フォルダを窓に落とすだけです。
+[ダウンロード](https://github.com/hiroaki222/transcrate/releases/latest)して開き、曲かフォルダをドラッグ&ドロップするだけです。
 
 有料の開発者証明書は取得していません。年 99 ドルかかるうえ、まだ誰も使っていない段階で払う理由が薄いためです。そのため macOS も Windows も初回起動時に警告を出しますが、一度許可すれば次からは普通に開きます。macOS の手順は Apple が案内しています: [身元不明の開発者による Mac App を開く][unsigned-mac]。Windows では SmartScreen が **詳細情報 → 実行** を求めてきます。
 
 画面は 3 つあります。
 
 - **CONVERT** — 各行に、今の形式、変換後の形式、そして機材 10 台分のランプが並びます。緑が再生できる機材、赤い斜線が再生できない機材です。下の段には変換後の判定が出ます。
+
+  ![曲ごとに、今の判定と変換後の判定が並んだ画面](docs/images/convert.ja.png)
+
 - **USB CHECK** — 挿したメディアを指定すると、どの機材が読めるかを判定します。読み取り専用で、初期化のボタンは置いていません。
 
   ![挿したメディアを全機材と照合した画面](docs/images/usb-check.ja.png)
