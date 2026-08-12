@@ -41,16 +41,33 @@ jobs:
           printf '%s\n\n' "$CHANGES" > release-body.md
           cat .github/release-notice.md >> release-body.md
 
+      # A candidate is marked as one. GitHub does not read the tag, so without
+      # this a `-rc1` would sit at the top of the page as the current release.
       - name: Open a draft
         id: create
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+
+          case "$GITHUB_REF_NAME" in
+            *-alpha*|*-beta*|*-rc*) pre=--prerelease ;;
+            *)                      pre= ;;
+          esac
+
           gh release create "$GITHUB_REF_NAME" \
-            --draft \
+            --draft $pre \
             --title "$GITHUB_REF_NAME" \
             --notes-file release-body.md
-          echo "id=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+          # tauri-action wants the numeric id. Handed the tag instead it
+          # uploads nowhere and still reports success, which is how the first
+          # run produced a green bundle job and an empty release.
+          id="$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+                 --jq ".[] | select(.tag_name == \"$GITHUB_REF_NAME\") | .id")"
+          test -n "$id"
+
+          echo "id=$id" >> "$GITHUB_OUTPUT"
 
   # Nothing publishes an LGPL ffmpeg for macOS, so one is built here. GPL-only
   # components are left out on purpose: this program is MIT or Apache-2.0, and
@@ -171,7 +188,11 @@ jobs:
         include:
           - os: macos-latest
             target: aarch64-apple-darwin
-          - os: macos-13
+          # Cross-compiled from Apple silicon rather than built on macos-13.
+          # That runner is being retired and the job sat unscheduled long
+          # enough to hold the whole release open; the SDK carries both
+          # architectures, so nothing is lost by not being on one.
+          - os: macos-latest
             target: x86_64-apple-darwin
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -187,7 +208,11 @@ jobs:
 
       - run: cargo build --release --locked -p transcrate-cli --target ${{ matrix.target }}
 
+      # The name is carried to the next step rather than matched with a glob:
+      # only one of the two archive kinds exists on any given runner, so a
+      # pattern for the other reaches the uploader unexpanded and fails.
       - name: Pack it
+        id: pack
         shell: bash
         run: |
           set -euo pipefail
@@ -195,24 +220,38 @@ jobs:
           out="target/${{ matrix.target }}/release"
 
           if [ "${{ runner.os }}" = "Windows" ]; then
-            7z a "$name.zip" "./$out/transcrate.exe" LICENSE-MIT LICENSE-APACHE README.md
+            asset="$name.zip"
+            7z a "$asset" "./$out/transcrate.exe" LICENSE-MIT LICENSE-APACHE README.md
           else
-            tar -czf "$name.tar.gz" -C "$out" transcrate \
+            asset="$name.tar.gz"
+            tar -czf "$asset" -C "$out" transcrate \
               -C "$GITHUB_WORKSPACE" LICENSE-MIT LICENSE-APACHE README.md
           fi
+
+          ls -la "$asset"
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
 
       - name: Upload
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" transcrate-*.tar.gz transcrate-*.zip --clobber
+        run: gh release upload "$GITHUB_REF_NAME" "${{ steps.pack.outputs.asset }}" --clobber
 
   publish:
     needs: [bundle, cli]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Every job has uploaded by now, so there is something to show.
       - name: Take it out of draft
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        run: |
+          set -euo pipefail
+
+          count="$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets | length')"
+          echo "assets: $count"
+          # An empty release is worse than a missing one: it looks finished.
+          test "$count" -gt 0
+
+          gh release edit "$GITHUB_REF_NAME" --draft=false
