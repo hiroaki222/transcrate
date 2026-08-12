@@ -11,6 +11,7 @@ pub mod files;
 pub mod parallel;
 pub mod plan;
 pub mod probe;
+pub mod scan;
 pub mod usb;
 
 pub use compat::{AudioSpec, Issue, check};
