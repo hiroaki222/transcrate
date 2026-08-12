@@ -172,9 +172,15 @@ jobs:
       - run: bun install --frozen-lockfile
         working-directory: gui
 
+      # Ad-hoc, with no certificate. Apple silicon refuses to run a binary
+      # carrying no signature at all and reports it as damaged, which sends
+      # people to the Trash rather than to the "open anyway" setting. Signing
+      # for nobody is enough to turn that back into the ordinary unidentified
+      # developer prompt.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
         with:
           projectPath: gui
           releaseId: ${{ needs.draft.outputs.id }}
