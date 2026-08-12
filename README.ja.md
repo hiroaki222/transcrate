@@ -103,14 +103,15 @@ cargo run -p transcrate-cli -- convert ~/Music/track.flac --to aiff
 
 ### タグとアートワーク
 
-元ファイルが持っていたタグはそのまま引き継ぐ. ただし `comment` と
-`lyrics-eng` は空にする. この 2 つは配信サイトやリッピングツールが宣伝文句を
-書き込む場所であり, CDJ はコメントをブラウザ上でタイトルの隣に表示する.
-タイトル・アーティスト・アルバム・ジャンル・キー・BPM は残す. ブラウザで
-探すために必要な情報だからである.
+元ファイルが持っていたタグはそのまま引き継ぐ. ただし `lyrics-eng` は空にする.
+歌詞を CDJ で読む人はおらず, リッピングツールが宣伝文句を書き込む場所でもある.
+タイトル・アーティスト・アルバム・ジャンル・キー・BPM は残す. ブラウザで探す
+ために必要な情報だからである.
 
-`--keep-comment` を付けるとコメントは削除されない. 自分でキューのメモや
-Camelot キーを書き込んでいる場合はこちらを使う. 歌詞はどちらの場合も削除する.
+コメントも残す. 配信サイトが宣伝文句を書き込む場所であり, CDJ はそれをブラウザ
+上でタイトルの隣に表示するため消したくもなるが, 自分でキューのメモや Camelot
+キーを書き込んでいる場合, 消すと取り戻せない. 消したいときは `--clear-comment`
+を付ける.
 
 ### 変換せずにタグだけ整える
 
@@ -129,11 +130,11 @@ transcrate retag ~/Music
 ため, ロッシー音源が文字列の書き換えで劣化することはなく, 既に正しい音声を
 再エンコードする時間もかからない.
 
-`--no-artwork` と `--keep-comment` は `convert` と同じ意味で使える:
+`--no-artwork` と `--clear-comment` は `convert` と同じ意味で使える:
 
 ```sh
 transcrate retag ~/Music --no-artwork                 # ジャケットを全部消す
-transcrate retag ~/Music --no-artwork --keep-comment  # ジャケットは消し, メモは残す
+transcrate retag ~/Music --no-artwork --clear-comment  # ジャケットもコメントも消す
 ```
 
 埋め込みアートワークも引き継ぐ. rekordbox と CDJ のブラウザが認識できる形で

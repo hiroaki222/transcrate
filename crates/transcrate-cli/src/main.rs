@@ -109,7 +109,7 @@ Examples:
 Examples:
   transcrate retag ~/Music                      Clear the comment and the lyrics
   transcrate retag ~/Music --no-artwork         Drop the sleeve as well
-  transcrate retag ~/Music --keep-comment --no-artwork
+  transcrate retag ~/Music --clear-comment --no-artwork
                                                 Drop the sleeve, keep your notes")]
     Retag(RetagArgs),
 
@@ -180,13 +180,14 @@ struct ConvertArgs {
     #[arg(long)]
     no_artwork: bool,
 
-    /// Keep the comment field, which is otherwise emptied.
+    /// Empty the comment field, which is otherwise carried across.
     ///
-    /// Cleared by default because that is where shops and rippers leave their
-    /// advertising, and a CDJ shows it next to the title. Worth keeping if you
-    /// put your own cue notes or a Camelot key there.
+    /// Worth doing on a library bought from shops that fill it with their own
+    /// advertising, which a CDJ then shows next to the title. It is left alone
+    /// by default, because that is also where DJs put their own cue notes and
+    /// Camelot keys.
     #[arg(long)]
-    keep_comment: bool,
+    clear_comment: bool,
 
     /// How many files to convert at once. Defaults to one per core.
     #[arg(short = 'j', long, value_name = "N")]
@@ -215,9 +216,9 @@ struct RetagArgs {
     #[arg(long)]
     no_artwork: bool,
 
-    /// Keep the comment field, which is otherwise emptied.
+    /// Empty the comment field, which is otherwise carried across.
     #[arg(long)]
-    keep_comment: bool,
+    clear_comment: bool,
 
     /// How many files to work on at once. Defaults to one per core.
     #[arg(short = 'j', long, value_name = "N")]
@@ -265,8 +266,8 @@ fn run_convert(args: &ConvertArgs) -> ExitCode {
         }
     };
 
-    let base = if args.keep_comment {
-        MetadataPolicy::KEEPING_COMMENTS
+    let base = if args.clear_comment {
+        MetadataPolicy::CLEARING_COMMENTS
     } else {
         target.metadata
     };
@@ -300,8 +301,8 @@ fn run_retag(args: &RetagArgs) -> ExitCode {
         } else {
             Artwork::Keep
         },
-        ..if args.keep_comment {
-            MetadataPolicy::KEEPING_COMMENTS
+        ..if args.clear_comment {
+            MetadataPolicy::CLEARING_COMMENTS
         } else {
             MetadataPolicy::DJ
         }

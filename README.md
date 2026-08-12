@@ -106,13 +106,14 @@ that is not what dither is for.
 
 ### Tags and artwork
 
-Everything the source carried comes across, except `comment` and `lyrics-eng`.
-Those two are where shops and rippers leave their advertising, and a CDJ puts
-the comment in the browser right next to the title. Title, artist, album, genre,
-key and BPM are what the browser is for, so they stay.
+Everything the source carried comes across, except `lyrics-eng`. Nobody reads
+lyrics off a CDJ, and it is where rippers leave their advertising. Title,
+artist, album, genre, key and BPM are what the browser is for, so they stay.
 
-`--keep-comment` leaves the comment alone, for anyone who keeps their own cue
-notes or a Camelot key there. The lyrics go either way.
+The comment stays too. Shops fill it with advertising and a CDJ shows it in the
+browser next to the title, which is an argument for clearing it — but it is
+also where DJs keep their own cue notes and Camelot keys, and those cannot be
+got back. `--clear-comment` empties it when you want that.
 
 ### Tidying tags without converting
 
@@ -131,11 +132,11 @@ to AIFF takes one command rather than one per extension. The audio stream is
 copied across untouched: a lossy file loses nothing to a change of text, and
 nothing is spent re-encoding audio that was already correct.
 
-`--no-artwork` and `--keep-comment` mean the same here as on `convert`:
+`--no-artwork` and `--clear-comment` mean the same here as on `convert`:
 
 ```sh
 transcrate retag ~/Music --no-artwork                 # drop every sleeve
-transcrate retag ~/Music --no-artwork --keep-comment  # sleeves out, notes stay
+transcrate retag ~/Music --no-artwork --clear-comment  # sleeves out, comments too
 ```
 
 Embedded artwork rides along, labelled the way rekordbox and the CDJ browser
