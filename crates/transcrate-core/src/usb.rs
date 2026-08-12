@@ -41,7 +41,7 @@ pub fn drive_at(path: &Path) -> Option<Drive> {
     // from inside /Volumes, a `..`, a symlink. Resolving first also rules out
     // a path that is not there — without that, every mistyped name matches the
     // root mount and comes back described as the machine's own disk.
-    let path = path.canonicalize().ok()?;
+    let path = without_verbatim_prefix(path.canonicalize().ok()?);
 
     let disks = sysinfo::Disks::new_with_refreshed_list();
 
@@ -78,6 +78,22 @@ pub fn readers_of(filesystem: FileSystem, players: &'static [DeviceProfile]) -> 
         readable,
         unreadable,
     }
+}
+
+/// Drop the `\\?\` that Windows' `canonicalize` puts on the front.
+///
+/// Mount points there are reported as `C:\`, and a verbatim path never starts
+/// with one, so the two would never compare. Everywhere else this is the
+/// identity.
+fn without_verbatim_prefix(path: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    {
+        if let Some(stripped) = path.to_str().and_then(|text| text.strip_prefix(r"\\?\")) {
+            return PathBuf::from(stripped);
+        }
+    }
+
+    path
 }
 
 /// The filesystem family behind an operating system's name for it.
@@ -160,6 +176,17 @@ mod tests {
         assert!(
             drive_at(relative).is_some(),
             "a relative path found no drive"
+        );
+    }
+
+    /// Windows canonicalises to `\\?\C:\…` while reporting mount points as
+    /// `C:\`, so the prefix has to come off or nothing ever matches.
+    #[cfg(windows)]
+    #[test]
+    fn a_verbatim_prefix_is_removed() {
+        assert_eq!(
+            without_verbatim_prefix(PathBuf::from(r"\\?\C:\Users")),
+            PathBuf::from(r"C:\Users")
         );
     }
 
