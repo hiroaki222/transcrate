@@ -551,7 +551,7 @@ fn report_contents(
     );
     list(failing.iter().map(|verdict| {
         let why = match &verdict.error {
-            Some(error) => error.clone(),
+            Some(error) => first_line(error),
             None => verdict
                 .refused_by
                 .iter()
@@ -582,6 +582,27 @@ fn list(lines: impl ExactSizeIterator<Item = String>) {
 
     if let Some(rest) = total.checked_sub(NAMED_AT_MOST).filter(|rest| *rest > 0) {
         println!("    and {rest} more");
+    }
+}
+
+/// One track to a line, so a column of them stays a column.
+///
+/// ffprobe's complaint runs to several lines and carries the address it was
+/// loaded at, none of which says anything about the track. The first line does.
+fn first_line(message: &str) -> String {
+    let line = message.lines().next().unwrap_or(message).trim();
+
+    // "could not read the file: [mp3 @ 0x…] Failed to find…" — ffprobe naming the
+    // decoder it loaded and the address it landed at, between two useful parts.
+    // Matched on the address, so a bracket that means something else survives.
+    let tagged = line
+        .find(": [")
+        .and_then(|start| line[start..].find("] ").map(|end| (start, start + end)))
+        .filter(|(start, end)| line[*start..*end].contains(" @ 0x"));
+
+    match tagged {
+        Some((start, end)) => format!("{}: {}", &line[..start], &line[end + 2..]),
+        None => line.to_owned(),
     }
 }
 
@@ -1208,5 +1229,27 @@ mod tests {
             requested_bits: 32,
         });
         assert!(depth.contains("32"), "got: {depth}");
+    }
+
+    /// One drive can hold thousands of unreadable files, and ffprobe answers
+    /// each with several lines and the address it happened to load at. Left
+    /// alone that turns a column of tracks into an unreadable wall.
+    #[test]
+    fn a_failure_reads_as_one_line_about_the_track() {
+        let raw = "ffprobe could not read the file: [mp3 @ 0xaacc38000] Failed to \
+                   find two consecutive MPEG audio frames.\n\
+                   /Volumes/DJ/track.mp3: Invalid data found when processing input";
+
+        assert_eq!(
+            first_line(raw),
+            "ffprobe could not read the file: Failed to find two consecutive MPEG audio frames."
+        );
+    }
+
+    /// Most failures carry no decoder tag, and must come through untouched.
+    #[test]
+    fn a_message_without_ffprobes_noise_is_left_alone() {
+        assert_eq!(first_line("no such file"), "no such file");
+        assert_eq!(first_line("gave up: [1] of 2"), "gave up: [1] of 2");
     }
 }

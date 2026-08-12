@@ -116,6 +116,36 @@ export const en: Strings = {
     fixNote: (count) => `Formatted FAT32, all ${count} would read it.`,
   },
 
+  scan: {
+    title: "CONTENTS",
+    reading: (done, total) =>
+      `Reading ${done.toLocaleString()} of ${total.toLocaleString()}`,
+    summary: (tracks, folders, deepest) =>
+      `${tracks.toLocaleString()} tracks, ${folders.toLocaleString()} folders, ${deepest} levels deep`,
+    otherFiles: (count) =>
+      `${count.toLocaleString()} other files, which no player lists.`,
+    noTracks: "No tracks on this drive.",
+    allPlay: (count) =>
+      `All ${count.toLocaleString()} tracks play on the chosen players.`,
+
+    // The drive mounts and the files are there — the browser simply stops.
+    // Saying only "too deep" leaves it sounding cosmetic.
+    deepTitle: (count) =>
+      `${count.toLocaleString()} folders never appear on the player`,
+    deepNote: (limit) =>
+      `The browser stops at ${limit} levels. Nothing inside these can be selected.`,
+    crowdedTitle: (count) =>
+      `${count.toLocaleString()} folders are cut short on the player`,
+    crowdedNote: (limit) =>
+      `A folder lists at most ${limit.toLocaleString()} entries.`,
+    crowdedEntries: (entries) => `${entries.toLocaleString()} entries`,
+    failingTitle: (count) =>
+      `${count.toLocaleString()} tracks at least one player will not take`,
+    failingNote: "Drop them on CONVERT to see what they would become.",
+    root: "drive root",
+    andMore: (rest) => `and ${rest.toLocaleString()} more`,
+  },
+
   devices: {
     yes: "yes",
     no: "no",

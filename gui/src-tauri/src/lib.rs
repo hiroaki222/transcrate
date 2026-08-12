@@ -17,9 +17,9 @@ use tauri::{AppHandle, Emitter};
 use transcrate_core::device::{self, DeviceProfile};
 use transcrate_core::files::{self, PreviousOutput};
 use transcrate_core::plan::{Action, MetadataPolicy, Target};
-use transcrate_core::{convert, parallel, usb};
+use transcrate_core::{convert, parallel, scan, usb};
 
-use view::{DeviceRow, Drive, Lamp, Progress, Tools, Track};
+use view::{Contents, DeviceRow, Drive, Lamp, Progress, Tools, Track};
 
 /// What the window has chosen, as it stands when a command is issued.
 #[derive(Debug, Clone, Deserialize)]
@@ -280,6 +280,100 @@ fn check_drive(path: String, settings: Settings) -> Result<Option<Drive>, String
     }))
 }
 
+/// What is on the drive, and which of it the players will take.
+///
+/// Separate from `check_drive` because it is the slow half: the walk is
+/// immediate, but reading the tracks is one ffprobe each and a full stick is
+/// thousands of them. The window shows the filesystem verdict straight away and
+/// fills this in as it arrives.
+#[allow(clippy::needless_pass_by_value)]
+#[tauri::command]
+async fn scan_drive(
+    app: AppHandle,
+    path: String,
+    settings: Settings,
+) -> Result<Option<Contents>, String> {
+    tauri::async_runtime::spawn_blocking(move || sweep(&app, &path, &settings))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn sweep(app: &AppHandle, path: &str, settings: &Settings) -> Result<Option<Contents>, String> {
+    let players = settings.players()?;
+    let Some(limits) = scan::Limits::strictest_of(&players) else {
+        return Ok(None);
+    };
+
+    // The drive, not the folder that was pointed at: a limit is a property of
+    // the stick, and half of it measured is a wrong answer rather than a partial one.
+    let root = match usb::drive_at(Path::new(path)) {
+        Some(drive) => drive.mount_point,
+        None => PathBuf::from(path),
+    };
+
+    let contents = scan::walk(&root, limits);
+    let total = contents.tracks.len();
+
+    let done = AtomicUsize::new(0);
+    let verdicts = scan::judge(
+        &contents.tracks,
+        &tool(FFPROBE),
+        &players,
+        parallel::default_concurrency(),
+        &|index| {
+            report(
+                app,
+                "scan",
+                done.fetch_add(1, Ordering::Relaxed) + 1,
+                total,
+                &contents.tracks[index],
+            );
+        },
+    );
+
+    report(app, "scan", total, total, Path::new(""));
+
+    let relative = |path: &Path| {
+        path.strip_prefix(&root)
+            .unwrap_or(path)
+            .display()
+            .to_string()
+    };
+
+    Ok(Some(Contents {
+        tracks: total,
+        folders: contents.folders,
+        other_files: contents.other_files,
+        deepest: contents.deepest,
+        depth_limit: limits.folder_depth,
+        entry_limit: limits.entries_per_folder,
+        unreachable: contents.unreachable.iter().map(|f| relative(f)).collect(),
+        crowded: contents
+            .crowded
+            .iter()
+            .map(|crowded| view::Crowded {
+                folder: relative(&crowded.folder),
+                entries: crowded.entries,
+            })
+            .collect(),
+        failing: verdicts
+            .iter()
+            .filter(|verdict| !verdict.plays())
+            .map(|verdict| view::FailingTrack {
+                path: verdict.path.display().to_string(),
+                name: view::file_name(&verdict.path),
+                folder: verdict.path.parent().map_or_else(String::new, &relative),
+                spec: verdict.spec,
+                lamps: verdict
+                    .spec
+                    .as_ref()
+                    .map_or_else(Vec::new, |spec| view::lamps_for(spec, &players)),
+                error: verdict.error.clone(),
+            })
+            .collect(),
+    }))
+}
+
 fn gather(paths: &[String], previous: PreviousOutput) -> Vec<PathBuf> {
     let paths: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
     files::collect(&paths, previous)
@@ -312,6 +406,7 @@ pub fn run() {
             locale,
             devices,
             inspect,
+            scan_drive,
             convert_all,
             check_drive
         ])

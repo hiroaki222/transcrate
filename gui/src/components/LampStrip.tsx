@@ -2,7 +2,8 @@ import type { Lamp } from "../api";
 import { useStrings } from "../strings";
 
 type Props = {
-  when: string;
+  /** Omitted where the surrounding row already says what is being judged. */
+  when?: string;
   lamps: Lamp[];
   /** A selected row is filled blue, so the tally has to shift with it. */
   onBlue?: boolean;
@@ -24,7 +25,7 @@ export function LampStrip({ when, lamps, onBlue = false }: Props) {
 
   return (
     <div className="lamps">
-      <span className="lamps-when">{when}</span>
+      {when !== undefined && <span className="lamps-when">{when}</span>}
       <span className="lamps-row">
         {lamps.map((lamp) => (
           <span

@@ -60,6 +60,31 @@ export type Drive = {
   readable: number;
 };
 
+export type Crowded = { folder: string; entries: number };
+
+export type FailingTrack = {
+  path: string;
+  name: string;
+  folder: string;
+  spec: AudioSpec | null;
+  lamps: Lamp[];
+  error: string | null;
+};
+
+/** What is on a drive, judged against the limits of the chosen players. */
+export type Contents = {
+  tracks: number;
+  folders: number;
+  otherFiles: number;
+  deepest: number;
+  depthLimit: number;
+  entryLimit: number | null;
+  unreachable: string[];
+  crowded: Crowded[];
+  /** Only the tracks at least one player refuses. */
+  failing: FailingTrack[];
+};
+
 export type Outcome = {
   path: string;
   name: string;
@@ -92,3 +117,6 @@ export const convertAll = (paths: string[], settings: ConvertOptions) =>
 
 export const checkDrive = (path: string, settings: ConvertOptions) =>
   invoke<Drive | null>("check_drive", { path, settings });
+
+export const scanDrive = (path: string, settings: ConvertOptions) =>
+  invoke<Contents | null>("scan_drive", { path, settings });

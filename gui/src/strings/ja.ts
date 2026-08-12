@@ -120,6 +120,36 @@ export const ja = {
       `FAT32で初期化すると、${count}機種すべてで認識できます。`,
   },
 
+  scan: {
+    title: "中身",
+    reading: (done: number, total: number) =>
+      `${done.toLocaleString()} / ${total.toLocaleString()}曲を確認中`,
+    summary: (tracks: number, folders: number, deepest: number) =>
+      `${tracks.toLocaleString()}曲、${folders.toLocaleString()}フォルダ、最大${deepest}階層`,
+    otherFiles: (count: number) =>
+      `ほかに${count.toLocaleString()}件、機材の一覧に出ないファイルがあります。`,
+    noTracks: "曲が見つかりませんでした。",
+    allPlay: (count: number) =>
+      `${count.toLocaleString()}曲すべてが、選んだ機材で再生できます。`,
+
+    // The drive mounts and the files are there — the browser simply stops.
+    // Saying only "too deep" leaves it sounding cosmetic.
+    deepTitle: (count: number) =>
+      `${count.toLocaleString()}フォルダが、機材の画面に出てきません`,
+    deepNote: (limit: number) =>
+      `${limit}階層までしか表示されません。中の曲は選べません。`,
+    crowdedTitle: (count: number) =>
+      `${count.toLocaleString()}フォルダが、最後まで表示されません`,
+    crowdedNote: (limit: number) =>
+      `1フォルダに表示されるのは${limit.toLocaleString()}件までです。`,
+    crowdedEntries: (entries: number) => `${entries.toLocaleString()}件`,
+    failingTitle: (count: number) =>
+      `${count.toLocaleString()}曲に、再生できない機材があります`,
+    failingNote: "CONVERTタブに入れると、変換後の判定を確認できます。",
+    root: "USB直下",
+    andMore: (rest: number) => `ほか${rest.toLocaleString()}件`,
+  },
+
   devices: {
     yes: "可",
     no: "不可",
