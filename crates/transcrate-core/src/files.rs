@@ -50,6 +50,7 @@ pub fn collect(paths: &[PathBuf], previous: PreviousOutput) -> Found {
 
     for path in paths {
         if path.is_dir() {
+            found.roots.push(path.clone());
             sweep(path, previous, &mut found);
         } else if !handed_over_in_bulk || is_audio(path) {
             found.files.push(path.clone());
@@ -73,6 +74,26 @@ pub struct Found {
     /// Whatever audio is inside them is missing from `files`, so a caller that
     /// drops this reports a partial run as a complete one.
     pub unreadable: Vec<PathBuf>,
+    /// The folders that were handed over and expanded, in the order given.
+    pub roots: Vec<PathBuf>,
+}
+
+impl Found {
+    /// The folder `file` was swept out of, if it was swept out of one.
+    ///
+    /// A file named one by one has none. Nobody handed over a shape to keep
+    /// there, so its result belongs beside it rather than under a folder that
+    /// was never mentioned.
+    #[must_use]
+    pub fn base_of(&self, file: &Path) -> Option<&Path> {
+        self.roots
+            .iter()
+            .filter(|root| file.starts_with(root))
+            // Roots can sit inside one another — `convert ~/Music ~/Music/Sets`
+            // — and the nearer one is the shape the person had in mind.
+            .max_by_key(|root| root.components().count())
+            .map(PathBuf::as_path)
+    }
 }
 
 fn sweep(directory: &Path, previous: PreviousOutput, into: &mut Found) {
@@ -138,24 +159,40 @@ pub fn is_audio(path: &Path) -> bool {
 
 /// Where a converted file lands.
 ///
-/// Defaults to a [`OUTPUT_FOLDER`] beside the input, so results sit next to the
-/// tracks they came from and never inside the source library itself.
+/// `base` is the folder the input was swept out of, when it came from one. A
+/// folder handed over whole keeps its shape: one [`OUTPUT_FOLDER`] is made
+/// beside it and each track comes out at the depth it went in at. Without that,
+/// a folder tree grows an output folder at every level and the results of one
+/// conversion end up scattered through it, with no single folder holding them
+/// — somebody opening the obvious one finds tracks missing and no sign of
+/// where they went.
+///
+/// A file named on its own has no `base`, and its result sits beside it.
 ///
 /// # Errors
 ///
 /// Fails when the input has no file name, and when the result would land on top
 /// of the source.
-pub fn output_path(input: &Path, into: Option<&Path>, codec: Codec) -> Result<PathBuf, PathError> {
+pub fn output_path(
+    input: &Path,
+    into: Option<&Path>,
+    base: Option<&Path>,
+    codec: Codec,
+) -> Result<PathBuf, PathError> {
     let stem = input
         .file_stem()
         .ok_or_else(|| PathError::Nameless(input.to_path_buf()))?;
 
-    let directory = match into {
-        Some(directory) => directory.to_path_buf(),
-        None => input.parent().unwrap_or(Path::new(".")).join(OUTPUT_FOLDER),
+    let holding = input.parent().unwrap_or(Path::new("."));
+    let kept = base.and_then(|base| holding.strip_prefix(base).ok());
+
+    let root = match (into, base) {
+        (Some(directory), _) => directory.to_path_buf(),
+        (None, Some(base)) => base.join(OUTPUT_FOLDER),
+        (None, None) => holding.join(OUTPUT_FOLDER),
     };
 
-    let mut destination = directory.join(stem);
+    let mut destination = root.join(kept.unwrap_or(Path::new(""))).join(stem);
     destination.set_extension(extension_for(codec));
 
     if destination == input {
@@ -359,7 +396,8 @@ mod tests {
     /// written into.
     #[test]
     fn output_lands_in_a_folder_beside_the_input() {
-        let output = output_path(Path::new("/music/track.flac"), None, Codec::Mp3).expect("path");
+        let output =
+            output_path(Path::new("/music/track.flac"), None, None, Codec::Mp3).expect("path");
 
         assert_eq!(output, Path::new("/music/_transcrate/track.mp3"));
     }
@@ -370,11 +408,58 @@ mod tests {
         let output = output_path(
             Path::new("/music/track.flac"),
             Some(Path::new("/stick/DJ")),
+            None,
             Codec::PcmAiff,
         )
         .expect("path");
 
         assert_eq!(output, Path::new("/stick/DJ/track.aiff"));
+    }
+
+    /// The failure this exists for: a folder handed over whole used to grow an
+    /// output folder at every level it had, so a run over `Set B` left two
+    /// tracks in `Set B/_transcrate` and a third somewhere five folders down.
+    /// Opening the obvious folder showed a conversion with tracks missing.
+    #[test]
+    fn a_swept_folder_keeps_its_shape_under_one_output_folder() {
+        let base = Path::new("/music/Set B");
+
+        assert_eq!(
+            output_path(
+                Path::new("/music/Set B/near.wav"),
+                None,
+                Some(base),
+                Codec::Mp3
+            )
+            .expect("path"),
+            Path::new("/music/Set B/_transcrate/near.mp3"),
+        );
+
+        assert_eq!(
+            output_path(
+                Path::new("/music/Set B/2024/Live/TooDeep/far.wav"),
+                None,
+                Some(base),
+                Codec::Mp3
+            )
+            .expect("path"),
+            Path::new("/music/Set B/_transcrate/2024/Live/TooDeep/far.mp3"),
+        );
+    }
+
+    /// The shape is kept under a named folder too, which is also what stops two
+    /// albums holding `01.wav` from claiming one destination.
+    #[test]
+    fn a_named_folder_holds_the_same_shape() {
+        let output = output_path(
+            Path::new("/music/Set B/2024/far.wav"),
+            Some(Path::new("/stick/DJ")),
+            Some(Path::new("/music/Set B")),
+            Codec::Mp3,
+        )
+        .expect("path");
+
+        assert_eq!(output, Path::new("/stick/DJ/2024/far.mp3"));
     }
 
     /// Converting an MP3 into an MP3 in the folder it already sits in would
@@ -384,6 +469,7 @@ mod tests {
         let refused = output_path(
             Path::new("/music/track.mp3"),
             Some(Path::new("/music")),
+            None,
             Codec::Mp3,
         );
 

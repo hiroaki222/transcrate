@@ -137,11 +137,11 @@ fn examine(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec
     let target = settings.target()?;
     let players = settings.players()?;
     let found = gather(paths, PreviousOutput::Skip);
-    let inputs = found.files;
+    let inputs = &found.files;
 
     let done = AtomicUsize::new(0);
     let prepared = convert::prepare_all(
-        &inputs,
+        &found,
         None,
         &tool(FFPROBE),
         &|_| target,
@@ -209,11 +209,11 @@ async fn convert_all(
 fn encode(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<Outcome>, String> {
     let target = settings.target()?;
     let found = gather(paths, PreviousOutput::Skip);
-    let inputs = found.files;
+    let inputs = &found.files;
 
     let concurrency = parallel::default_concurrency();
     let prepared = convert::prepare_all(
-        &inputs,
+        &found,
         None,
         &tool(FFPROBE),
         &|_| target,

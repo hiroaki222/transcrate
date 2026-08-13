@@ -63,8 +63,10 @@ fn working_out_a_job_writes_nothing_to_disk() {
     let flac = encode(&dir, "track.flac", 44_100, &["-c:a", "flac"]);
     let _ = std::fs::remove_dir_all(dir.join(files::OUTPUT_FOLDER));
 
-    let job = convert::prepare(&flac, None, Path::new("ffprobe"), &|_| Target::CDJ_SAFE)
-        .expect("prepare");
+    let job = convert::prepare(&flac, None, None, Path::new("ffprobe"), &|_| {
+        Target::CDJ_SAFE
+    })
+    .expect("prepare");
 
     assert_eq!(job.output, dir.join(files::OUTPUT_FOLDER).join("track.mp3"));
     assert!(

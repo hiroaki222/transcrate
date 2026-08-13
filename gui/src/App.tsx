@@ -50,6 +50,25 @@ function remembered(): string[] | null {
   }
 }
 
+/**
+ * The result nearest the top of the output folder.
+ *
+ * A folder keeps its shape when it is converted, so the results are spread
+ * through a tree rather than sitting in one flat list. Revealing whichever
+ * happened to be first would open a folder five levels in, which is the same
+ * confusion as not opening anything: the shallowest one puts the whole set in
+ * view.
+ */
+function shallowest(outcomes: Outcome[]): string | null {
+  const done = outcomes.filter((outcome) => outcome.error === null);
+  if (done.length === 0) return null;
+
+  const depth = (path: string) => path.split(/[/\\]/).length;
+  return done.reduce((best, at) =>
+    depth(at.outputPath) < depth(best.outputPath) ? at : best,
+  ).outputPath;
+}
+
 export function App() {
   const [choice, setChoice] = useState<Choice>(
     () => (localStorage.getItem(LANGUAGE) as Choice | null) ?? "auto",
@@ -227,8 +246,8 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
       setOutcomes(done);
 
       // Show where it landed, rather than leaving people to hunt for it.
-      const landing = done.find((outcome) => outcome.error === null)?.outputPath;
-      if (landing !== undefined) await revealItemInDir(landing);
+      const landing = shallowest(done);
+      if (landing !== null) await revealItemInDir(landing);
 
       await examine(dropped);
     } catch (error) {
@@ -253,8 +272,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
   // leaves the one file that needs attention to be found by hand.
   const refused = outcomes?.filter((outcome) => outcome.error !== null) ?? [];
 
-  const landed =
-    outcomes?.find((outcome) => outcome.error === null)?.outputPath ?? null;
+  const landed = outcomes === null ? null : shallowest(outcomes);
   const missing = tools !== null && (!tools.ffmpeg || !tools.ffprobe);
 
   const tabs: [Tab, string][] = [

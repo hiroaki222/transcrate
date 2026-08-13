@@ -374,14 +374,7 @@ fn run_jobs(
         return ExitCode::FAILURE;
     }
 
-    let prepared = convert::prepare_all(
-        &found.files,
-        into,
-        ffprobe,
-        target_for,
-        concurrency,
-        &|_, _| {},
-    );
+    let prepared = convert::prepare_all(&found, into, ffprobe, target_for, concurrency, &|_, _| {});
 
     let mut planned = Vec::new();
     // A folder that would not open is a failure of the run, not a detail of it:
@@ -403,7 +396,11 @@ fn run_jobs(
 
     let results = convert::run_all(ffmpeg, &planned, concurrency, &|index, result| {
         let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
-        report_one(finished, total, &planned[index], result);
+        let job = &planned[index];
+        // Where the results are rooted, so a line says where the file went
+        // rather than naming the one folder it happens to sit in.
+        let root = into.or_else(|| found.base_of(&job.input));
+        report_one(finished, total, job, root, result);
     });
 
     all_done &= results.iter().all(Result::is_ok);
@@ -739,6 +736,7 @@ fn report_one(
     finished: usize,
     total: usize,
     job: &convert::Job,
+    root: Option<&Path>,
     result: &Result<(), ConvertError>,
 ) {
     use std::io::Write;
@@ -758,7 +756,7 @@ fn report_one(
                 out,
                 "[{finished}/{total}] {} -> {}  ({how})",
                 name.display(),
-                enclosing_path(&job.output)
+                landed_at(&job.output, root)
             );
         }
         Err(error) => {
@@ -768,12 +766,19 @@ fn report_one(
     }
 }
 
-/// A path as its own folder and name, which says where a file went without
-/// repeating the whole library path on every line.
-fn enclosing_path(path: &Path) -> String {
-    let name = path.file_name().unwrap_or(path.as_os_str());
+/// Where a result went, said from the folder the results are rooted at.
+///
+/// The whole library path on every line would be unreadable, and the enclosing
+/// folder alone is worse than that: a track nested five deep comes out nested
+/// five deep, and naming only the folder it landed in leaves out the part that
+/// says where to start looking.
+fn landed_at(output: &Path, root: Option<&Path>) -> String {
+    if let Some(under) = root.and_then(|root| output.strip_prefix(root).ok()) {
+        return under.display().to_string();
+    }
 
-    match path.parent().and_then(Path::file_name) {
+    let name = output.file_name().unwrap_or(output.as_os_str());
+    match output.parent().and_then(Path::file_name) {
         Some(folder) => format!("{}/{}", folder.display(), name.display()),
         None => name.display().to_string(),
     }

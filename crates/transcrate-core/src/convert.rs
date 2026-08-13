@@ -71,6 +71,7 @@ pub enum PrepareError {
 pub fn prepare(
     input: &Path,
     into: Option<&Path>,
+    base: Option<&Path>,
     ffprobe: &Path,
     target_for: &dyn Fn(&AudioSpec) -> Target,
 ) -> Result<Job, PrepareError> {
@@ -80,7 +81,7 @@ pub fn prepare(
     })?;
 
     let plan = crate::plan::plan(&source, &target_for(&source));
-    let output = files::output_path(input, into, plan.output.codec)?;
+    let output = files::output_path(input, into, base, plan.output.codec)?;
 
     Ok(Job {
         plan,
@@ -134,7 +135,7 @@ pub struct Job {
 ///
 /// Panics if a worker thread panics.
 pub fn prepare_all(
-    files: &[PathBuf],
+    found: &files::Found,
     into: Option<&Path>,
     ffprobe: &Path,
     target_for: &(dyn Fn(&AudioSpec) -> Target + Sync),
@@ -142,9 +143,9 @@ pub fn prepare_all(
     on_finished: &(dyn Fn(usize, &Result<Job, PrepareError>) + Sync),
 ) -> Vec<Result<Job, PrepareError>> {
     let mut prepared = parallel::map(
-        files,
+        &found.files,
         concurrency,
-        &|_, file| prepare(file, into, ffprobe, target_for),
+        &|_, file| prepare(file, into, found.base_of(file), ffprobe, target_for),
         on_finished,
     );
 
