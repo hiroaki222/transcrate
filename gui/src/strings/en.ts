@@ -175,6 +175,10 @@ export const en: Strings = {
       `A folder lists at most ${limit.toLocaleString()} entries.`,
     crowdedEntries: (entries) =>
       `${entries.toLocaleString()} ${entries === 1 ? "entry" : "entries"}`,
+    unreadableTitle: (count) => `${many(count, "folder")} that could not be read`,
+    unreadableNote: "Nothing inside them was counted or checked.",
+    // Placed under the count, where it changes how the count should be read.
+    partial: "The folders below hold tracks that are not in these counts.",
     failingTitle: (count) =>
       `${many(count, "track")} at least one player will not take`,
     failingNote: "Drop them on CONVERT to see what they would become.",

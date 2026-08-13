@@ -255,6 +255,14 @@ function ScanReport({ contents }: { contents: Contents | null }) {
   if (contents === null) return null;
 
   const plays = contents.tracks - contents.failing.length;
+  // Three ways a count above can be short of the drive: a folder the browser
+  // never descends into, one it stops listing part way, and one this program
+  // could not read at all. Tracks behind any of them were never counted and
+  // never judged.
+  const hasGaps =
+    contents.unreachable.length > 0 ||
+    contents.crowded.length > 0 ||
+    contents.unreadable.length > 0;
 
   return (
     <section className="scan">
@@ -305,15 +313,20 @@ function ScanReport({ contents }: { contents: Contents | null }) {
         <p className="note">{t.scan.noTracks}</p>
       ) : (
         /*
-          Keyed on the tracks alone, not on `clean`: a folder nested too deep
-          says nothing about whether the tracks themselves play, and "2 of 2
-          tracks play" is a strange way to say all of them do.
+          Green says the drive is ready, so it is withheld while anything is
+          missing from the count. The sentence itself is still worth saying —
+          the tracks that were read do play — but it is a report on what was
+          reached rather than a promise about the stick.
         */
-        <p className={plays > 0 ? "scan-clear" : "note"}>
+        <p className={plays > 0 && !hasGaps ? "scan-clear" : "note"}>
           {contents.failing.length === 0
             ? t.scan.allPlay(contents.tracks)
             : t.scan.someFail(plays, contents.tracks)}
         </p>
+      )}
+
+      {hasGaps && contents.tracks > 0 && (
+        <p className="note">{t.scan.partial}</p>
       )}
 
       {contents.otherFiles > 0 && (
@@ -331,6 +344,20 @@ function ScanReport({ contents }: { contents: Contents | null }) {
             </li>
           ))}
           <More total={contents.unreachable.length} />
+        </Finding>
+      )}
+
+      {contents.unreadable.length > 0 && (
+        <Finding
+          title={t.scan.unreadableTitle(contents.unreadable.length)}
+          note={t.scan.unreadableNote}
+        >
+          {contents.unreadable.slice(0, NAMED_AT_MOST).map((folder) => (
+            <li key={folder}>
+              <span className="scan-path">{folder}</span>
+            </li>
+          ))}
+          <More total={contents.unreadable.length} />
         </Finding>
       )}
 

@@ -166,6 +166,11 @@ export const ja = {
     crowdedNote: (limit: number) =>
       `1フォルダに表示されるのは${limit.toLocaleString()}件までです。`,
     crowdedEntries: (entries: number) => `${entries.toLocaleString()}件`,
+    unreadableTitle: (count: number) =>
+      `${count.toLocaleString()}フォルダが、読み取れませんでした`,
+    unreadableNote: "中身は曲数にも判定にも入っていません。",
+    // Placed under the count, where it changes how the count should be read.
+    partial: "下に挙げたフォルダの中の曲は、上の数に入っていません。",
     failingTitle: (count: number) =>
       `${count.toLocaleString()}曲に、再生できない機材があります`,
     failingNote: "CONVERTタブに入れると、変換後の判定を確認できます。",

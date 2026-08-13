@@ -184,6 +184,9 @@ pub(crate) struct Contents {
     /// Folders the browser never reaches, named relative to the drive.
     pub(crate) unreachable: Vec<String>,
     pub(crate) crowded: Vec<Crowded>,
+    /// Folders the walk itself could not list. Whatever is inside them is
+    /// missing from every count above.
+    pub(crate) unreadable: Vec<String>,
     /// Only the tracks at least one player refuses. A stick holds thousands and
     /// the ones that work need no attention.
     pub(crate) failing: Vec<FailingTrack>,

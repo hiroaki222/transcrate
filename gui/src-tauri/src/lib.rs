@@ -413,6 +413,7 @@ fn sweep(app: &AppHandle, path: &str, settings: &Settings) -> Result<Option<Cont
         depth_limit: limits.folder_depth,
         entry_limit: limits.entries_per_folder,
         unreachable: contents.unreachable.iter().map(|f| relative(f)).collect(),
+        unreadable: contents.unreadable.iter().map(|f| relative(f)).collect(),
         crowded: contents
             .crowded
             .iter()

@@ -94,6 +94,8 @@ export type Contents = {
   entryLimit: number | null;
   unreachable: string[];
   crowded: Crowded[];
+  /** Folders the walk could not list. Their contents are in no count above. */
+  unreadable: string[];
   /** Only the tracks at least one player refuses. */
   failing: FailingTrack[];
 };
