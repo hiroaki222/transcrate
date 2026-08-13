@@ -227,9 +227,14 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x ffmpeg-out/* || true
-          # Absolute, and in Windows form where that is what cargo will read.
-          bin="$(cd ffmpeg-out && { pwd -W 2>/dev/null || pwd; })"
-          echo "$bin" >> "$GITHUB_PATH"
+          ls -la ffmpeg-out
+
+          # Unix form, deliberately. Bash splits PATH on colons, so a Windows
+          # path put here becomes two broken entries — `D` and `/a/...` — and
+          # nothing on it is ever found. Git Bash converts it back to Windows
+          # form when it launches cargo. The other form belongs in $GITHUB_PATH,
+          # which is read by the runner rather than by a shell.
+          bin="$(cd ffmpeg-out && pwd)"
           export PATH="$bin:$PATH"
           ffmpeg -version | head -1
           cargo test -p transcrate-core --test convert_real_files --test probe_real_files
