@@ -66,6 +66,10 @@ pub(crate) struct Track {
     /// `copy`, `retag` or `encode`.
     pub(crate) action: Option<&'static str>,
     pub(crate) dither: bool,
+    /// Whether the source was already short of information. Nothing a
+    /// conversion does can put back what its first encoder threw away, so this
+    /// is the one figure on the screen that cannot be improved.
+    pub(crate) thin: bool,
     /// Verdicts as the file stands.
     pub(crate) now: Vec<Lamp>,
     /// Verdicts on what the conversion would produce.
@@ -85,6 +89,7 @@ impl Track {
             output_path: None,
             action: None,
             dither: false,
+            thin: false,
             now: Vec::new(),
             after: Vec::new(),
             error: Some(error),

@@ -385,8 +385,45 @@ fn resolve(source: &AudioSpec, target: &Target) -> AudioSpec {
                 BitDepthPolicy::CapAt(bits) => source.bit_depth.map(|depth| depth.min(bits)),
             }
         },
-        bitrate_kbps: if lossy { target.bitrate_kbps } else { None },
+        // Never above what arrived. A 128 kbps MP3 re-encoded at 320 is the
+        // same music through a second encoder: it sounds worse than it did,
+        // takes two and a half times the space, and reads on the screen as an
+        // improvement. Nothing puts back what the first encoder threw away.
+        //
+        // Only against the same codec. Handed AAC and asked for MP3, the two
+        // numbers do not describe the same thing, and an encode is happening
+        // whatever this says.
+        bitrate_kbps: if lossy {
+            match (target.bitrate_kbps, source.bitrate_kbps) {
+                (Some(asked), Some(arrived)) if source.codec == target.codec => {
+                    Some(asked.min(arrived))
+                }
+                (asked, _) => asked,
+            }
+        } else {
+            None
+        },
     }
+}
+
+/// Below what a club system makes obvious.
+///
+/// The line the DJ pools draw, and the one under which a track played loud
+/// through a big rig stops sounding like the record and starts sounding like
+/// the file.
+pub const THIN_BITRATE_KBPS: u16 = 192;
+
+/// Whether a file was already short of information before anything was done
+/// to it.
+///
+/// Worth saying out loud, because every other number on the screen goes up
+/// during a conversion and this one cannot: a thin source converted to AIFF is
+/// a thin source that now takes forty megabytes.
+#[must_use]
+pub fn sounds_thin(source: &AudioSpec) -> bool {
+    source
+        .bitrate_kbps
+        .is_some_and(|kbps| kbps < THIN_BITRATE_KBPS)
 }
 
 /// Dither belongs to requantisation, not to resampling: it decorrelates the

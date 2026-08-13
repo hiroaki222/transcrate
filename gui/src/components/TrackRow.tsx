@@ -60,6 +60,16 @@ export function TrackRow({
           ) : (
             <span className="row-judge ng">{t.track.unreadable}</span>
           )}
+          <span className="push" />
+
+          {/*
+            The source was already short of information, and every other figure
+            on this row goes up during a conversion while this one cannot. Said
+            here, beside the bitrate that explains it, rather than in a dialog
+            in front of the list.
+          */}
+          {track.thin && <span className="row-thin">{t.track.thin}</span>}
+
           {/*
             Its own button rather than a second meaning for the row, and the
             click stops here: the row opens on click, and taking a track out

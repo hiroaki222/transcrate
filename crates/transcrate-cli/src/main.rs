@@ -7,7 +7,7 @@ use clap::{CommandFactory, Parser, Subcommand, ValueHint};
 use clap_complete::Shell;
 use transcrate_core::convert::ConvertError;
 use transcrate_core::files::{self, PreviousOutput};
-use transcrate_core::plan::{Action, Artwork, MetadataPolicy, Target};
+use transcrate_core::plan::{self, Action, Artwork, MetadataPolicy, Target};
 use transcrate_core::usb;
 use transcrate_core::{
     AudioSpec, Codec, DEVICES, DeviceProfile, FileSystem, Issue, Support, by_id, check, convert,
@@ -995,6 +995,16 @@ fn rejected_anywhere(spec: &AudioSpec, players: &[&'static DeviceProfile]) -> bo
 fn report(file: &Path, spec: &AudioSpec, players: &[&'static DeviceProfile]) {
     println!("{}", file.display());
     println!("  {}", describe_spec(spec));
+
+    // Said here and nowhere else in the report, because every other line
+    // answers "will it play" and this one answers "is it worth playing". A
+    // player takes it happily; a room hears the encoder.
+    if plan::sounds_thin(spec) {
+        println!(
+            "  thin           under {} kbps, and converting cannot put it back",
+            plan::THIN_BITRATE_KBPS
+        );
+    }
 
     let mut playable = Vec::new();
     let mut rejected = Vec::new();

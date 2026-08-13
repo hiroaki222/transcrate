@@ -517,12 +517,24 @@ select {
 }
 
 /*
+  Orange, not red: the track plays, and a red tag beside a green verdict would
+  read as a contradiction. What it warns about is the ceiling, not the outcome.
+*/
+.row-thin {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border: 1px solid currentColor;
+  color: var(--orange);
+  white-space: nowrap;
+}
+
+/*
   Kept faint until the row is under the pointer. It is the one control here
   that throws work away, and a row of them down the list would read as the
   point of the screen rather than an escape from it.
 */
 .row-drop {
-  margin-left: auto;
   align-self: center;
   width: 22px;
   height: 22px;

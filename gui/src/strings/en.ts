@@ -91,6 +91,7 @@ export const en: Strings = {
     unreadable: "Cannot be read",
     remove: "Take out of the list",
     dither: "dithered",
+    thin: "cannot be improved",
     lampsNow: "NOW",
     lampsAfter: "AFTER",
     playsOn: (name) => `${name} — plays`,

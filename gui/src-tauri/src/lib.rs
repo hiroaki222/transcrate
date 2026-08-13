@@ -16,7 +16,7 @@ use tauri::{AppHandle, Emitter};
 
 use transcrate_core::device::{self, DeviceProfile};
 use transcrate_core::files::{self, PreviousOutput};
-use transcrate_core::plan::{Action, MetadataPolicy, Target};
+use transcrate_core::plan::{self, Action, MetadataPolicy, Target};
 use transcrate_core::{convert, parallel, scan, usb};
 
 use view::{Contents, DeviceRow, Drive, Lamp, Mounted, Progress, Tools, Track};
@@ -179,6 +179,7 @@ fn describe(input: &Path, job: &convert::Job, players: &[&'static DeviceProfile]
         output_path: Some(job.output.display().to_string()),
         action: Some(view::action_name(job.plan.action)),
         dither: matches!(job.plan.action, Action::Encode { dither: true }),
+        thin: plan::sounds_thin(&job.plan.source),
         now: view::lamps_for(&job.plan.source, players),
         after: view::lamps_for(&job.plan.output, players),
         error: None,

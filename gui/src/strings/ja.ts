@@ -82,6 +82,9 @@ export const ja = {
     unreadable: "読み込めません",
     remove: "リストから外す",
     dither: "ディザ",
+    // Said on the row rather than in the way. The bitrate is already
+    // beside it; this is what that number means for the night.
+    thin: "音質は上がりません",
     lampsNow: "NOW",
     lampsAfter: "変換後",
     playsOn: (name: string) => `${name} — 再生できます`,

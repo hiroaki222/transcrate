@@ -36,6 +36,8 @@ export type Track = {
   outputPath: string | null;
   action: "copy" | "retag" | "encode" | null;
   dither: boolean;
+  /** The source was already short of information; converting cannot help. */
+  thin: boolean;
   now: Lamp[];
   after: Lamp[];
   error: string | null;
