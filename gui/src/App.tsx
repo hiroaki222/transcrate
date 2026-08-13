@@ -197,12 +197,19 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
     };
   }, [examine]);
 
-  // Re-judge whatever is listed whenever the settings that decide it change.
+  /*
+    Re-judge whatever is listed whenever the settings that decide it change.
+
+    Keyed on `settings` rather than on the four values it is built from. Named
+    one by one, the list is the memo's dependency list written out a second
+    time: a fifth setting added to the memo and forgotten here would leave the
+    verdicts on screen answering the old question, with nothing to say so.
+  */
   useEffect(() => {
     if (dropped.length > 0 && busy === null) void examine(dropped);
-    // examine changes on every settings change, so depending on it would loop.
+    // `examine` is rebuilt on every settings change, so depending on it loops.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, keepComment, artwork, chosen]);
+  }, [settings]);
 
   /*
     The list is rewritten to what is left rather than filtered on the way out.
