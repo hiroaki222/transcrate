@@ -9,7 +9,6 @@ use serde::Serialize;
 
 use transcrate_core::compat::{self, AudioSpec, Issue};
 use transcrate_core::device::{Codec, DeviceProfile, FileSystem, Support};
-use transcrate_core::plan::Action;
 
 /// The six columns of the compatibility table, in the order they are shown.
 pub(crate) const COLUMNS: [(&str, Codec); 6] = [
@@ -63,8 +62,6 @@ pub(crate) struct Track {
     pub(crate) source: Option<AudioSpec>,
     pub(crate) output: Option<AudioSpec>,
     pub(crate) output_path: Option<String>,
-    /// `copy`, `retag` or `encode`.
-    pub(crate) action: Option<&'static str>,
     pub(crate) dither: bool,
     /// Whether the source was already short of information. Nothing a
     /// conversion does can put back what its first encoder threw away, so this
@@ -87,7 +84,6 @@ impl Track {
             source: None,
             output: None,
             output_path: None,
-            action: None,
             dither: false,
             thin: false,
             now: Vec::new(),
@@ -102,14 +98,6 @@ pub(crate) fn file_name(path: &std::path::Path) -> String {
         .unwrap_or(path.as_os_str())
         .to_string_lossy()
         .into_owned()
-}
-
-pub(crate) const fn action_name(action: Action) -> &'static str {
-    match action {
-        Action::Copy => "copy",
-        Action::Retag => "retag",
-        Action::Encode { .. } => "encode",
-    }
 }
 
 /// One row of the compatibility table.

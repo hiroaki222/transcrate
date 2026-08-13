@@ -177,7 +177,6 @@ fn describe(input: &Path, job: &convert::Job, players: &[&'static DeviceProfile]
         source: Some(job.plan.source),
         output: Some(job.plan.output),
         output_path: Some(job.output.display().to_string()),
-        action: Some(view::action_name(job.plan.action)),
         dither: matches!(job.plan.action, Action::Encode { dither: true }),
         thin: plan::sounds_thin(&job.plan.source),
         now: view::lamps_for(&job.plan.source, players),

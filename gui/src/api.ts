@@ -34,7 +34,6 @@ export type Track = {
   source: AudioSpec | null;
   output: AudioSpec | null;
   outputPath: string | null;
-  action: "copy" | "retag" | "encode" | null;
   dither: boolean;
   /** The source was already short of information; converting cannot help. */
   thin: boolean;

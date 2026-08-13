@@ -1,6 +1,6 @@
 import type { Track } from "../api";
 import { useStrings } from "../strings";
-import { actionName, describeSpec, groupReasons } from "../text";
+import { describeSpec, groupReasons } from "../text";
 import { LampStrip } from "./LampStrip";
 
 type Props = {
@@ -133,7 +133,6 @@ export function TrackRow({
             {describeSpec(track.source)}
             <span className="row-arrow">→</span>
             <b>{describeSpec(track.output)}</b>
-            <span className="row-doing">{actionName(t, track.action)}</span>
             {track.dither && <span className="row-doing">{t.track.dither}</span>}
           </div>
         )}

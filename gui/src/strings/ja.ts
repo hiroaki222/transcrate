@@ -11,7 +11,7 @@ export const ja = {
     lossless: {
       label: "音質を保って現場で再生",
       format: "AIFF  最大 48 kHz  24 bit",
-      note: "音質を落とさずに、10機種すべてで再生できます。",
+      note: "圧縮せずに、10機種すべてで再生できます。48 kHz を超える曲はレートを下げます。",
     },
     archive: {
       label: "保存用（再生保証なし）",
@@ -75,7 +75,7 @@ export const ja = {
 
   empty: {
     title: "曲またはフォルダをここにドロップ",
-    note: "フォルダを選ぶと、中の音声ファイルだけを読み込みます。",
+    note: "フォルダをドロップすると、中の音声ファイルだけを読み込みます。",
   },
 
   track: {
@@ -104,12 +104,6 @@ export const ja = {
       `${reason}。${devices.join("、")}`,
   },
 
-  action: {
-    copy: "そのままコピー",
-    retag: "曲情報だけ更新",
-    encode: "変換",
-  },
-
   // The subject of every one of these is the player, named alongside them.
   // `${codec}は` made the codec the subject instead — "FLAC does not support
   // 96,000 Hz" rather than "it does not support FLAC at 96,000 Hz" — which
@@ -130,7 +124,7 @@ export const ja = {
     refresh: "再検索",
     unreadable: "どの機材も読めません",
     readOnly: "READ ONLY",
-    count: (n: number) => `${n} 枚`,
+    count: (n: number) => `${n}枚`,
     free: (n: number) => `空き ${n.toFixed(1)} GB`,
     gb: (n: number) => `${n.toFixed(1)} GB`,
     capacity: "空き容量",

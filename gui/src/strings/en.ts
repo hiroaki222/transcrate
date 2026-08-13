@@ -20,7 +20,7 @@ export const en: Strings = {
     lossless: {
       label: "Lossless, plays on everything",
       format: "AIFF  up to 48 kHz  24 bit",
-      note: "Nothing is thrown away, and all 10 players still read it.",
+      note: "Nothing is compressed, and all 10 players read it. A source above 48 kHz comes down to it.",
     },
     archive: {
       label: "Keep a copy (no playback promise)",
@@ -68,7 +68,7 @@ export const en: Strings = {
     cancel: "Keep them",
     clearTitle: "Take every track out of the list?",
     clearNote: (count) =>
-      `${count} tracks leave the list. Not one file is deleted.`,
+      `${many(count, "track")} leave the list. Not one file is deleted.`,
     clearGo: "Clear the list",
   },
 
@@ -103,12 +103,6 @@ export const en: Strings = {
     reasonDetail: (reason, devices) => `${reason}. ${devices.join(", ")}`,
   },
 
-  action: {
-    copy: "copied as is",
-    retag: "tags only",
-    encode: "encoded",
-  },
-
   issue: {
     codec: (codec) => `${codec} is not supported`,
     sampleRate: (codec, hz) => `${hz} Hz is not supported for ${codec}`,
@@ -135,8 +129,8 @@ export const en: Strings = {
     emptyNote: "Nothing is written to it, and it is never formatted.",
     nothingMounted: (path) => `Nothing is mounted at ${path}`,
     lamps: "READS",
-    allRead: (count) => `All ${count} players read this drive.`,
-    someFail: (count) => `${count} players will not read this drive.`,
+    allRead: (count) => `All ${many(count, "player")} read this drive.`,
+    someFail: (count) => `${many(count, "player")} will not read this drive.`,
   },
 
   scan: {

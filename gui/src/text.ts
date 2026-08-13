@@ -1,4 +1,4 @@
-import type { AudioSpec, Codec, Issue, Lamp, Track } from "./api";
+import type { AudioSpec, Codec, Issue, Lamp } from "./api";
 import type { Strings } from "./strings";
 
 const CODECS: Record<Codec, string> = {
@@ -48,9 +48,6 @@ export function describeIssue(t: Strings, issue: Issue): string {
       );
   }
 }
-
-export const actionName = (t: Strings, action: Track["action"]) =>
-  action === null ? "" : t.action[action];
 
 /**
  * Collapse the players that failed for the same reason into one line.
