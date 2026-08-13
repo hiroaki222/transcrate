@@ -64,7 +64,7 @@ export const ja = {
   },
 
   dialog: {
-    pickTracks: "曲またはフォルダを選択",
+    pickTracks: "曲を選択",
   },
 
   done: {

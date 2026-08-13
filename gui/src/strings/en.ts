@@ -73,7 +73,7 @@ export const en: Strings = {
   },
 
   dialog: {
-    pickTracks: "Choose tracks or a folder",
+    pickTracks: "Choose tracks",
   },
 
   done: {
