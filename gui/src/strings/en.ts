@@ -61,6 +61,7 @@ export const en: Strings = {
     keepComment: "Keep comments",
     keepArtwork: "Keep artwork",
     pick: "Choose tracks",
+    clear: "Clear",
     convert: (count) => `Convert ${count}`,
   },
 
@@ -83,6 +84,7 @@ export const en: Strings = {
 
   track: {
     unreadable: "Cannot be read",
+    remove: "Take out of the list",
     dither: "dithered",
     lampsNow: "NOW",
     lampsAfter: "AFTER",

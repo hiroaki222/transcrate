@@ -52,6 +52,7 @@ export const ja = {
     keepComment: "コメントを残す",
     keepArtwork: "ジャケットを残す",
     pick: "曲を選ぶ",
+    clear: "すべて外す",
     convert: (count: number) => `${count}曲を変換`,
   },
 
@@ -74,6 +75,7 @@ export const ja = {
 
   track: {
     unreadable: "読み込めません",
+    remove: "リストから外す",
     dither: "ディザ",
     lampsNow: "NOW",
     lampsAfter: "変換後",

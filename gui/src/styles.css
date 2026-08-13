@@ -235,6 +235,28 @@ select {
   border: 1px solid var(--orange);
 }
 
+/*
+  Outlined rather than filled: the orange one beside it is the button people
+  came here to press, and two solid blocks competing at the same size would
+  make the destructive one just as easy to hit by accident. It fills only once
+  the pointer is on it, which is late enough to be a warning and not a wall.
+*/
+.danger-btn {
+  padding: 7px 14px;
+  font-family: var(--jp);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--red);
+  background: transparent;
+  border: 1px solid var(--red);
+}
+
+.danger-btn:hover:not(:disabled) {
+  color: #1a0402;
+  background: var(--red);
+}
+
+.danger-btn:disabled,
 .go-btn:disabled {
   color: var(--w-3);
   background: transparent;
@@ -446,6 +468,43 @@ select {
 
 .row-judge.ok {
   color: var(--green);
+}
+
+/*
+  Kept faint until the row is under the pointer. It is the one control here
+  that throws work away, and a row of them down the list would read as the
+  point of the screen rather than an escape from it.
+*/
+.row-drop {
+  margin-left: auto;
+  align-self: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--w-3);
+  background: transparent;
+  border: 1px solid transparent;
+  opacity: 0;
+}
+
+.row:hover .row-drop,
+.row-drop:focus-visible {
+  opacity: 1;
+}
+
+.row-drop:hover {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.row-drop:disabled {
+  opacity: 0;
+  cursor: default;
 }
 
 .row[data-sel] .row-judge.ng {

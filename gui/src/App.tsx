@@ -183,6 +183,32 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, keepComment, artwork, chosen]);
 
+  /*
+    The list is rewritten to what is left rather than filtered on the way out.
+    A drop is usually one folder, and that folder is re-read whenever a setting
+    changes — which would bring back everything ever taken out of the list.
+  */
+  function remove(path: string) {
+    const left = tracks.filter((track) => track.path !== path);
+
+    setTracks(left);
+    setDropped(left.map((track) => track.path));
+    if (selected === path) setSelected(null);
+  }
+
+  /*
+    Nothing on disk is touched — this empties the list and no more. It is marked
+    as the destructive one because it is the only control here that throws away
+    work already done, and it sits beside the one that acts on all of it.
+  */
+  function clear() {
+    setTracks([]);
+    setDropped([]);
+    setSelected(null);
+    setOutcomes(null);
+    setFailure(null);
+  }
+
   async function choose() {
     const picked = await open({ multiple: true, title: t.dialog.pickTracks });
     if (picked === null) return;
@@ -282,6 +308,14 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
 
             <span className="push" />
             <button
+              className="danger-btn"
+              disabled={tracks.length === 0 || busy !== null}
+              onClick={clear}
+              type="button"
+            >
+              {t.toolbar.clear}
+            </button>
+            <button
               className="go-btn"
               disabled={tracks.length === 0 || busy !== null}
               onClick={run}
@@ -332,8 +366,10 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
             <div className="rows">
               {tracks.map((track, at) => (
                 <TrackRow
+                  frozen={busy !== null}
                   index={at}
                   key={track.path}
+                  onRemove={() => remove(track.path)}
                   onSelect={() =>
                     setSelected((was) => (was === track.path ? null : track.path))
                   }
