@@ -91,7 +91,7 @@ export const en: Strings = {
     unreadable: "Cannot be read",
     remove: "Take out of the list",
     dither: "dithered",
-    thin: "cannot be improved",
+    thin: "Low-quality source",
     lampsNow: "NOW",
     lampsOnly: "NOW",
     lampsAfter: "AFTER",

@@ -82,9 +82,9 @@ export const ja = {
     unreadable: "読み込めません",
     remove: "リストから外す",
     dither: "ディザ",
-    // Said on the row rather than in the way. The bitrate is already
-    // beside it; this is what that number means for the night.
-    thin: "音質は上がりません",
+    // Read on hover, and by anything reading the row aloud. The bitrate is
+    // already beside it; this says what that number means.
+    thin: "音質が悪いファイルです",
     lampsNow: "変換前",
     // Alone, with no second strip beside it, "変換前" would send the reader
     // looking for the half that is not there.

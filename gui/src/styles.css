@@ -18,6 +18,7 @@
   --blue: #0b84ff;
   --orange: #ff8a00;
   --red: #ff3b30;
+  --yellow: #ffcc00;
   --green: #00c853;
   --green-solid: #00a83a;
 
@@ -529,16 +530,33 @@ select {
 }
 
 /*
-  Orange, not red: the track plays, and a red tag beside a green verdict would
-  read as a contradiction. What it warns about is the ceiling, not the outcome.
+  A mark, not a sentence. What it reports is a fact about the file rather than
+  anything to be done about it, and a worded tag beside the verdict read as a
+  second verdict. Yellow rather than red: the track plays.
 */
 .row-thin {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 1px 7px;
-  border: 1px solid currentColor;
-  color: var(--orange);
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  color: var(--yellow);
+  flex: none;
+}
+
+.row-thin svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.row-thin svg path {
+  fill: none;
+}
+
+.row-thin svg circle {
+  fill: currentColor;
+  stroke: none;
 }
 
 /*
@@ -1566,15 +1584,6 @@ table.grid td.yes {
 .gear[data-on] {
   color: var(--w);
   border-color: var(--line);
-}
-
-.gear svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
 }
 
 .dot {
