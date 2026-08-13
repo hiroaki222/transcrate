@@ -107,8 +107,10 @@ export const ja = {
 
   verdict: {
     allPlay: (count: number) => `${count}機種すべてで再生できます`,
-    nonePlay: (count: number) => `${count}機種すべてで再生できません`,
-    somePlay: (count: number) => `${count}機種で再生できません`,
+    // What to do about it, rather than what is wrong with it. On this screen
+    // every one of these is a file about to be converted, and "再生できません"
+    // reads as a dead end for a state the conversion below it settles.
+    convert: "変換が必要",
   },
 
   issue: {

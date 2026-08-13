@@ -109,8 +109,8 @@ export const en: Strings = {
 
   verdict: {
     allPlay: (count) => `Plays on all ${count}`,
-    nonePlay: (count) => `Plays on none of the ${count}`,
-    somePlay: (count) => `Will not play on ${count}`,
+    // What to do about it, rather than what is wrong with it.
+    convert: "Needs converting",
   },
 
   issue: {

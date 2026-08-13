@@ -54,9 +54,13 @@ export const actionName = (t: Strings, action: Track["action"]) =>
 
 export function verdict(t: Strings, lamps: Lamp[]): string {
   const bad = lamps.filter((lamp) => !lamp.ok).length;
-  if (bad === 0) return t.verdict.allPlay(lamps.length);
-  if (bad === lamps.length) return t.verdict.nonePlay(lamps.length);
-  return t.verdict.somePlay(bad);
+
+  /*
+    How many players refuse it is on the lamps and on the tally beside them.
+    What is left for this to say is whether there is anything to do, and there
+    is only one answer either way — three refusals and ten are the same job.
+  */
+  return bad === 0 ? t.verdict.allPlay(lamps.length) : t.verdict.convert;
 }
 
 /**
