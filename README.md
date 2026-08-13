@@ -366,7 +366,8 @@ Released builds of the app carry an **LGPL** ffmpeg beside the executable, never
 a GPL one: this program is MIT or Apache-2.0, and a GPL binary in the same
 bundle would carry GPL obligations into it. An LGPL build covers every format
 written here — MP3 through libmp3lame, AAC through ffmpeg's own encoder, and
-FLAC, ALAC and PCM natively. Windows takes BtbN's published LGPL build; nobody
-publishes one for macOS, so
-[the release workflow compiles it](.github/scripts/build-ffmpeg-macos.sh) with
-the GPL-only components left out.
+FLAC, ALAC and PCM natively. Nobody publishes an LGPL build for macOS at all,
+and the one published for Windows is a full build — 115 MB a binary against the
+4 MB a trimmed one comes to, carried inside every download. So
+[the release workflow compiles both](.github/scripts/build-ffmpeg.sh) from the
+same list of formats, with the GPL-only components left out.

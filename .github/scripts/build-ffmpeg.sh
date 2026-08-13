@@ -72,7 +72,9 @@ tar -xzf lame.tar.gz
 cd "lame-$LAME_VERSION"
 # frontend/ builds the `lame` command line tool, which needs nothing we ship
 # and fails on macOS over a missing termcap.
-./configure "${host[@]}" --prefix="$prefix" \
+# ${a[@]:+...} rather than ${a[@]}: an empty array under `set -u` is an
+# unbound variable on the bash macOS ships, which is bash 3.2.
+./configure ${host[@]:+"${host[@]}"} --prefix="$prefix" \
   --disable-shared --enable-static --disable-frontend
 make -j"$cores"
 make install
@@ -99,7 +101,7 @@ cd "ffmpeg-$FFMPEG_VERSION"
 # search path, and a cross build that picks up the host's libraries fails late
 # and confusingly. This way only the prefix just built is visible.
 PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig" ./configure \
-  "${cross[@]}" \
+  ${cross[@]:+"${cross[@]}"} \
   --prefix="$prefix" \
   --pkg-config-flags="--static" \
   --extra-cflags="-I$prefix/include" \
