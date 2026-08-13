@@ -214,7 +214,7 @@ export function DrivePanel({
                   <dd className={unreadable.length > 0 ? "ng" : undefined}>
                     {unreadable.length === 0
                       ? t.drive.refusedNone
-                      : unreadable.map((lamp) => lamp.name).join("、")}
+                      : t.drive.refusedNames(unreadable.map((lamp) => lamp.name))}
                   </dd>
                 </div>
               </dl>

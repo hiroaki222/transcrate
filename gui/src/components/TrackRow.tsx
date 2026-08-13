@@ -99,9 +99,7 @@ export function TrackRow({
             {reasons.map(({ reason, devices }) => (
               <div className="why-line" key={reason}>
                 <dt>{t.track.reasonCount(devices.length)}</dt>
-                <dd>
-                  {reason}。{devices.join("、")}
-                </dd>
+                <dd>{t.track.reasonDetail(reason, devices)}</dd>
               </div>
             ))}
           </dl>

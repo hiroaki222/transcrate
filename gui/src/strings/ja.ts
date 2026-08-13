@@ -51,7 +51,6 @@ export const ja = {
     selectAll: "すべて選択",
     keepComment: "コメントを残す",
     keepArtwork: "ジャケットを残す",
-    pick: "曲を選ぶ",
     clear: "すべて外す",
     convert: (count: number) => `${count}曲を変換`,
   },
@@ -66,7 +65,6 @@ export const ja = {
 
   dialog: {
     pickTracks: "曲またはフォルダを選択",
-    pickDrive: "USBを選択",
   },
 
   done: {
@@ -90,6 +88,10 @@ export const ja = {
     playsOn: (name: string) => `${name} — 再生できます`,
     failsOn: (name: string) => `${name} — 再生できません`,
     reasonCount: (count: number) => `${count}機種`,
+    // Punctuation belongs to the language, not to whichever component happens
+    // to be joining the parts up.
+    reasonDetail: (reason: string, devices: string[]) =>
+      `${reason}。${devices.join("、")}`,
   },
 
   action: {
@@ -115,7 +117,6 @@ export const ja = {
   },
 
   drive: {
-    pick: "USBを選ぶ",
     picking: "接続されているUSBを探しています",
     none: "USBが見つかりません。挿してから、もう一度お試しください。",
     refresh: "再検索",
@@ -128,25 +129,17 @@ export const ja = {
     format: "ファイル形式",
     refused: "認識できない機材",
     refusedNone: "なし",
+    refusedNames: (names: string[]) => names.join("、"),
     emptyTitle: "USBを選ぶと、対応機材を確認できます",
     emptyNote: "USBには書き込みません。初期化もしません。",
     nothingMounted: (path: string) => `${path}には何もマウントされていません`,
     lamps: "認識",
     allRead: (count: number) => `${count}機種すべてがこのUSBを認識します。`,
     someFail: (count: number) => `${count}機種がこのUSBを認識しません。`,
-    failReason: (filesystem: string, names: string) =>
-      `${filesystem}を認識しません。${names}`,
-    fix: "対処",
-    fixNote: (count: number) =>
-      `FAT32で初期化すると、${count}機種すべてで認識できます。`,
   },
 
   scan: {
     title: "中身",
-    reading: (done: number, total: number) =>
-      `${done.toLocaleString()} / ${total.toLocaleString()}曲を確認中`,
-    summary: (tracks: number, folders: number, deepest: number) =>
-      `${tracks.toLocaleString()}曲、${folders.toLocaleString()}フォルダ、最大${deepest}階層`,
     otherFiles: (count: number) =>
       `ほかに${count.toLocaleString()}件、機材の一覧に出ないファイルがあります。`,
     noTracks: "曲が見つかりませんでした。",

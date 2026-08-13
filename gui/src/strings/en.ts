@@ -60,7 +60,6 @@ export const en: Strings = {
     selectAll: "Select all",
     keepComment: "Keep comments",
     keepArtwork: "Keep artwork",
-    pick: "Choose tracks",
     clear: "Clear",
     convert: (count) => `Convert ${count}`,
   },
@@ -75,7 +74,6 @@ export const en: Strings = {
 
   dialog: {
     pickTracks: "Choose tracks or a folder",
-    pickDrive: "Choose a drive",
   },
 
   done: {
@@ -99,6 +97,7 @@ export const en: Strings = {
     playsOn: (name) => `${name} — plays`,
     failsOn: (name) => `${name} — will not play`,
     reasonCount: (count) => `${count} player${count === 1 ? "" : "s"}`,
+    reasonDetail: (reason, devices) => `${reason}. ${devices.join(", ")}`,
   },
 
   action: {
@@ -122,7 +121,6 @@ export const en: Strings = {
   },
 
   drive: {
-    pick: "Choose a drive",
     picking: "Looking for drives",
     none: "No drive found. Plug one in and look again.",
     refresh: "Look again",
@@ -135,23 +133,17 @@ export const en: Strings = {
     format: "Filesystem",
     refused: "Will not read it",
     refusedNone: "none",
+    refusedNames: (names) => names.join(", "),
     emptyTitle: "Choose a drive to see which players will read it",
     emptyNote: "Nothing is written to it, and it is never formatted.",
     nothingMounted: (path) => `Nothing is mounted at ${path}`,
     lamps: "READS",
     allRead: (count) => `All ${count} players read this drive.`,
     someFail: (count) => `${count} players will not read this drive.`,
-    failReason: (filesystem, names) => `Does not read ${filesystem}. ${names}`,
-    fix: "Fix",
-    fixNote: (count) => `Formatted FAT32, all ${count} would read it.`,
   },
 
   scan: {
     title: "CONTENTS",
-    reading: (done, total) =>
-      `Reading ${done.toLocaleString()} of ${total.toLocaleString()}`,
-    summary: (tracks, folders, deepest) =>
-      `${many(tracks, "track")}, ${many(folders, "folder")}, ${deepest} levels deep`,
     otherFiles: (count) => `${many(count, "other file")}, which no player lists.`,
     noTracks: "No tracks on this drive.",
     allPlay: (count) => `All ${many(count, "track")} play on the chosen players.`,
