@@ -56,6 +56,14 @@ export const ja = {
     convert: (count: number) => `${count}曲を変換`,
   },
 
+  confirm: {
+    cancel: "やめる",
+    clearTitle: "リストの曲をすべて外しますか",
+    clearNote: (count: number) =>
+      `${count}曲がリストから消えます。ファイル自体は消えません。`,
+    clearGo: "すべて外す",
+  },
+
   dialog: {
     pickTracks: "曲またはフォルダを選択",
     pickDrive: "USBを選択",

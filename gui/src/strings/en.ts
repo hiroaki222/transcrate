@@ -65,6 +65,14 @@ export const en: Strings = {
     convert: (count) => `Convert ${count}`,
   },
 
+  confirm: {
+    cancel: "Keep them",
+    clearTitle: "Take every track out of the list?",
+    clearNote: (count) =>
+      `${count} tracks leave the list. Not one file is deleted.`,
+    clearGo: "Clear the list",
+  },
+
   dialog: {
     pickTracks: "Choose tracks or a folder",
     pickDrive: "Choose a drive",

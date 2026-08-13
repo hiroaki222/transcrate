@@ -20,6 +20,7 @@ import {
   locale as loadLocale,
   tools as loadTools,
 } from "./api";
+import { Confirm } from "./components/Confirm";
 import { DeviceTable } from "./components/DeviceTable";
 import { DevicePicker } from "./components/DevicePicker";
 import { DrivePanel } from "./components/DrivePanel";
@@ -99,6 +100,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
   const [rows, setRows] = useState<DeviceRow[]>([]);
   const [tools, setTools] = useState<Tools | null>(null);
   const [hovering, setHovering] = useState(false);
+  const [asking, setAsking] = useState(false);
 
   const settings: ConvertOptions = useMemo(
     () => ({ profile, keepComment, artwork, devices: chosen }),
@@ -202,6 +204,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
     work already done, and it sits beside the one that acts on all of it.
   */
   function clear() {
+    setAsking(false);
     setTracks([]);
     setDropped([]);
     setSelected(null);
@@ -310,7 +313,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
             <button
               className="danger-btn"
               disabled={tracks.length === 0 || busy !== null}
-              onClick={clear}
+              onClick={() => setAsking(true)}
               type="button"
             >
               {t.toolbar.clear}
@@ -395,6 +398,16 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
       {tab === "devices" && <DeviceTable rows={rows} />}
       {tab === "settings" && (
         <UtilityPanel choice={choice} onChange={onChooseLanguage} />
+      )}
+
+      {asking && (
+        <Confirm
+          confirm={t.confirm.clearGo}
+          note={t.confirm.clearNote(tracks.length)}
+          onCancel={() => setAsking(false)}
+          onConfirm={clear}
+          title={t.confirm.clearTitle}
+        />
       )}
 
       <footer className="deckbar" data-busy={busy !== null ? "" : undefined}>
