@@ -3,6 +3,10 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Everything here is reachable only by tagging, which makes a change to it
+  # unrunnable until the moment it matters. This builds and verifies without
+  # publishing: the release steps are all guarded on the tag.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,6 +20,10 @@ jobs:
   # without the downloads reads as a broken release for as long as the builds
   # take.
   draft:
+    # A manual run has no tag to release, so it stops after building and
+    # verifying. Everything below that would write to a release is guarded the
+    # same way.
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     outputs:
       id: ${{ steps.create.outputs.id }}
@@ -87,67 +95,153 @@ jobs:
           test -n "$id"
           echo "id=$id" >> "$GITHUB_OUTPUT"
 
-  # Nothing publishes an LGPL ffmpeg for macOS, so one is built here. GPL-only
-  # components are left out on purpose: this program is MIT or Apache-2.0, and
-  # shipping a GPL build inside the same bundle would carry GPL obligations
-  # into it. An LGPL build covers every format Transcrate writes.
-  ffmpeg-macos:
-    runs-on: macos-latest
+  # Both builds come from the same script. Nothing publishes an LGPL ffmpeg for
+  # macOS at all, and the one published for Windows is a full build — 115 MB a
+  # binary against the 4 MB this produces, carried inside every download.
+  #
+  # GPL-only components are left out on purpose: this program is MIT or
+  # Apache-2.0, and shipping a GPL build inside the same bundle would carry GPL
+  # obligations into it. An LGPL build covers every format Transcrate writes.
+  ffmpeg:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macos
+            os: macos-latest
+          # Cross-compiled: a Windows runner would need MSYS2 and a toolchain
+          # build before it started, and this needs one apt install.
+          - target: windows
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
+      - if: matrix.target == 'windows'
+        run: sudo apt-get update && sudo apt-get install -y mingw-w64
 
       - name: Cache the build
         id: cache
         uses: actions/cache@v4
         with:
           path: ffmpeg-out
-          key: ffmpeg-lgpl-macos-${{ hashFiles('.github/scripts/build-ffmpeg-macos.sh') }}
+          key: ffmpeg-lgpl-${{ matrix.target }}-${{ hashFiles('.github/scripts/build-ffmpeg.sh') }}
 
       - if: steps.cache.outputs.cache-hit != 'true'
-        run: bash .github/scripts/build-ffmpeg-macos.sh ffmpeg-out
+        run: bash .github/scripts/build-ffmpeg.sh ${{ matrix.target }} ffmpeg-out
 
-      - name: Check the licence held
+      # Every failure here is an explicit exit, and none of it is `! cmd`.
+      # Two ways that reads as a pass when it is not: `! ffmpeg | grep` succeeds
+      # when there is no ffmpeg at all, because the pipeline fails, grep matches
+      # nothing and the negation turns that into success; and `set -e` never
+      # fires on a command whose status is inverted with `!`, so such a line
+      # only decides anything when it happens to be the last one in the step.
+      - name: Check the binaries exist and hold their licence
+        shell: bash
         run: |
-          ./ffmpeg-out/ffmpeg -version | head -2
-          # A GPL component here would mean the configure flags did not hold,
-          # and the bundle would carry obligations this project does not accept.
-          ! ./ffmpeg-out/ffmpeg -version | grep -q -- --enable-gpl
+          set -euo pipefail
 
-      # The suite runs real conversions, so pointing it at this build is the
-      # only thing that proves `--disable-everything` did not cut something the
-      # app needs. Without it the binary that ships would be one nothing has
-      # ever encoded with.
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Convert with it
-        run: |
-          export PATH="$PWD/ffmpeg-out:$PATH"
-          ffmpeg -version | head -1
-          cargo test -p transcrate-core --test convert_real_files --test probe_real_files
+          suffix=""
+          if [ "${{ matrix.target }}" = windows ]; then suffix=".exe"; fi
+
+          for tool in ffmpeg ffprobe; do
+            if [ ! -s "ffmpeg-out/$tool$suffix" ]; then
+              echo "$tool was not built" >&2
+              exit 1
+            fi
+          done
+
+          # A cross-built binary cannot be run here, so the flags are read out
+          # of the file rather than out of `-version`.
+          banner="$(strings -a "ffmpeg-out/ffmpeg$suffix" |
+                    grep -m1 -- '--disable-everything' || true)"
+          if [ -z "$banner" ]; then
+            echo "no configure banner in the binary" >&2
+            exit 1
+          fi
+
+          for forbidden in --enable-gpl --enable-nonfree; do
+            if grep -qF -- "$forbidden" <<<"$banner"; then
+              echo "$forbidden is in this build" >&2
+              exit 1
+            fi
+          done
+
+          echo "$banner" | tr ' ' '\n' | grep -c -- '--enable-'
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ffmpeg-macos
+          name: ffmpeg-${{ matrix.target }}
           path: ffmpeg-out/*
 
+  # The suite runs real conversions, so pointing it at the build that ships is
+  # the only thing that proves `--disable-everything` did not cut something the
+  # app needs. Without it the binary in the download would be one nothing has
+  # ever encoded with. It has to run on the system the binary is for, which for
+  # Windows is not the system it was built on.
+  ffmpeg-test:
+    needs: ffmpeg
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macos
+            os: macos-latest
+          - target: windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-${{ matrix.target }}
+          path: ffmpeg-out
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Convert with it
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ffmpeg-out/* || true
+          # Absolute, and in Windows form where that is what cargo will read.
+          bin="$(cd ffmpeg-out && { pwd -W 2>/dev/null || pwd; })"
+          echo "$bin" >> "$GITHUB_PATH"
+          export PATH="$bin:$PATH"
+          ffmpeg -version | head -1
+          cargo test -p transcrate-core --test convert_real_files --test probe_real_files
+
   bundle:
-    needs: [draft, ffmpeg-macos]
+    needs: [draft, ffmpeg, ffmpeg-test]
+    # `draft` is skipped on a manual run, which would take this with it. The
+    # app is still built there: it is what proves the sidecars landed inside
+    # the bundle, and tauri-action uploads nowhere without a release id.
+    if: |
+      always()
+      && needs.ffmpeg.result == 'success'
+      && needs.ffmpeg-test.result == 'success'
+      && needs.draft.result != 'failure'
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-latest
             target: aarch64-apple-darwin
+            ffmpeg: macos
+            suffix: ""
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            ffmpeg: windows
+            suffix: ".exe"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
-        if: runner.os == 'macOS'
         with:
-          name: ffmpeg-macos
+          name: ffmpeg-${{ matrix.ffmpeg }}
           path: ffmpeg-in
 
       # Tauri looks for a sidecar named after the target triple and drops the
@@ -157,28 +251,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p gui/src-tauri/binaries
-          cd gui/src-tauri/binaries
 
-          case "${{ runner.os }}" in
-            macOS)
-              for tool in ffmpeg ffprobe; do
-                mv "$GITHUB_WORKSPACE/ffmpeg-in/$tool" "$tool-${{ matrix.target }}"
-                chmod +x "$tool-${{ matrix.target }}"
-              done
-              ;;
-            Windows)
-              bash "$GITHUB_WORKSPACE/.github/scripts/fetch.sh" \
-                https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip \
-                ffmpeg.zip
-              unzip -q ffmpeg.zip
-              for tool in ffmpeg ffprobe; do
-                find . -name "$tool.exe" -exec mv {} "$tool-${{ matrix.target }}.exe" \;
-              done
-              rm -rf ffmpeg.zip ffmpeg-*-win64-lgpl
-              ;;
-          esac
+          for tool in ffmpeg ffprobe; do
+            from="ffmpeg-in/$tool${{ matrix.suffix }}"
+            test -s "$from"
+            to="gui/src-tauri/binaries/$tool-${{ matrix.target }}${{ matrix.suffix }}"
+            mv "$from" "$to"
+            chmod +x "$to"
+          done
 
-          ls -la
+          ls -la gui/src-tauri/binaries
 
       - uses: oven-sh/setup-bun@v2
       - uses: dtolnay/rust-toolchain@stable
@@ -203,10 +285,22 @@ jobs:
           releaseId: ${{ needs.draft.outputs.id }}
           args: --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json
 
+      # Kept whether or not there is a release to attach them to. The size of
+      # the download is the reason ffmpeg is built here rather than fetched, and
+      # a manual run is where that gets weighed.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/bundle/**/*.dmg
+            target/${{ matrix.target }}/release/bundle/**/*.exe
+          if-no-files-found: error
+
   # The command line is a single file and wants no installer, so it ships as a
   # plain archive per platform.
   cli:
     needs: draft
+    if: github.ref_type == 'tag'
     strategy:
       fail-fast: false
       matrix:
@@ -261,6 +355,7 @@ jobs:
 
   publish:
     needs: [bundle, cli]
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

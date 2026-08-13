@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Build a static, LGPL ffmpeg and ffprobe for macOS.
+# Build a static, LGPL ffmpeg and ffprobe.
 #
-# Nobody publishes one. Every prebuilt macOS ffmpeg found so far is GPL,
+# Nobody publishes an LGPL macOS build. Every prebuilt one found so far is GPL,
 # because they all enable x264 — and Transcrate is MIT or Apache-2.0, so a GPL
 # binary inside the same bundle would carry GPL obligations into the thing
 # being shipped.
@@ -11,12 +11,47 @@
 # which is LGPL, AAC from ffmpeg's own encoder, and FLAC, ALAC and PCM are
 # native. Those are every format Transcrate writes.
 #
-# Usage: build-ffmpeg-macos.sh <output-directory>
+# Windows has an LGPL build published, but it is a full one: 115 MB per binary
+# against the 4 MB this produces, and all of it inside every download. The
+# formats are the same on both systems, so the list below is the one that
+# decides — kept here once, because two copies of it would drift.
+#
+# Usage: build-ffmpeg.sh <macos|windows> <output-directory>
 
 set -euo pipefail
 
-out="$(cd "$(dirname "${1:?output directory}")" && pwd)/$(basename "$1")"
+target="${1:?target: macos or windows}"
+out="$(cd "$(dirname "${2:?output directory}")" && pwd)/$(basename "$2")"
 mkdir -p "$out"
+
+case "$target" in
+  macos)
+    host=()
+    cross=()
+    strip_with="strip"
+    suffix=""
+    cores="$(sysctl -n hw.ncpu)"
+    ;;
+  windows)
+    # Cross-compiled from Linux. A Windows runner would need MSYS2 and a
+    # toolchain build before it started; this needs one apt install.
+    triple="x86_64-w64-mingw32"
+    host=("--host=$triple")
+    cross=(
+      --enable-cross-compile
+      "--cross-prefix=$triple-"
+      --target-os=mingw32
+      --arch=x86_64
+    )
+    strip_with="$triple-strip"
+    suffix=".exe"
+    cores="$(nproc)"
+    ;;
+  *)
+    echo "unknown target: $target (expected macos or windows)" >&2
+    exit 1
+    ;;
+esac
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -30,19 +65,22 @@ FFMPEG_VERSION="7.1.1"
 prefix="$work/prefix"
 mkdir -p "$prefix"
 
-echo "==> lame $LAME_VERSION"
+echo "==> lame $LAME_VERSION for $target"
 curl -fsSL -o lame.tar.gz \
   "https://downloads.sourceforge.net/project/lame/lame/$LAME_VERSION/lame-$LAME_VERSION.tar.gz"
 tar -xzf lame.tar.gz
 cd "lame-$LAME_VERSION"
 # frontend/ builds the `lame` command line tool, which needs nothing we ship
 # and fails on macOS over a missing termcap.
-./configure --prefix="$prefix" --disable-shared --enable-static --disable-frontend
-make -j"$(sysctl -n hw.ncpu)"
+# ${a[@]:+...} rather than ${a[@]}: an empty array under `set -u` is an
+# unbound variable on the bash macOS ships, which is bash 3.2.
+./configure ${host[@]:+"${host[@]}"} --prefix="$prefix" \
+  --disable-shared --enable-static --disable-frontend
+make -j"$cores"
 make install
 cd "$work"
 
-echo "==> ffmpeg $FFMPEG_VERSION"
+echo "==> ffmpeg $FFMPEG_VERSION for $target"
 curl -fsSL -o ffmpeg.tar.xz \
   "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz"
 tar -xf ffmpeg.tar.xz
@@ -58,7 +96,12 @@ cd "ffmpeg-$FFMPEG_VERSION"
 # whole PCM family, because the encoder is chosen from the output's bit depth at
 # runtime (`pcm_s24be` and so on), so listing only the depths in use today would
 # break the first time an unusual source turned up.
-PKG_CONFIG_PATH="$prefix/lib/pkgconfig" ./configure \
+#
+# PKG_CONFIG_LIBDIR rather than PKG_CONFIG_PATH: the latter adds to the host's
+# search path, and a cross build that picks up the host's libraries fails late
+# and confusingly. This way only the prefix just built is visible.
+PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig" ./configure \
+  ${cross[@]:+"${cross[@]}"} \
   --prefix="$prefix" \
   --pkg-config-flags="--static" \
   --extra-cflags="-I$prefix/include" \
@@ -88,11 +131,12 @@ PKG_CONFIG_PATH="$prefix/lib/pkgconfig" ./configure \
   --enable-indev=lavfi \
   --enable-bsf=extract_extradata
 
-make -j"$(sysctl -n hw.ncpu)"
+make -j"$cores"
 
-cp ffmpeg ffprobe "$out/"
-strip "$out/ffmpeg" "$out/ffprobe"
+for tool in ffmpeg ffprobe; do
+  cp "$tool$suffix" "$out/"
+  "$strip_with" "$out/$tool$suffix"
+done
 
 echo "==> built"
-"$out/ffmpeg" -version | head -2
 ls -la "$out"

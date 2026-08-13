@@ -284,4 +284,4 @@ macOS は Apple Silicon のみに対応しています。Intel Mac は 2020 年�
 
 ffmpeg は別プロセスとして起動していて、このプログラムにリンクしてはいません。
 
-アプリ版のリリースには **LGPL** ビルドの ffmpeg を実行ファイルの隣に同梱しています。GPL ビルドは使いません。このプログラムは MIT / Apache-2.0 なので、同じバンドルに GPL のバイナリを入れると、配布物側にも GPL の義務が及ぶためです。LGPL ビルドでも、書き出しに使う形式はすべて賄えます。MP3 は libmp3lame、AAC は ffmpeg 自身のエンコーダ、FLAC / ALAC / PCM は本体機能です。Windows は BtbN が公開している LGPL ビルドを使い、macOS 向けの LGPL ビルドは公開されていないため [リリース時にソースからビルドしています](.github/scripts/build-ffmpeg-macos.sh)。GPL 専用の部品は外してあります。
+アプリ版のリリースには **LGPL** ビルドの ffmpeg を実行ファイルの隣に同梱しています。GPL ビルドは使いません。このプログラムは MIT / Apache-2.0 なので、同じバンドルに GPL のバイナリを入れると、配布物側にも GPL の義務が及ぶためです。LGPL ビルドでも、書き出しに使う形式はすべて賄えます。MP3 は libmp3lame、AAC は ffmpeg 自身のエンコーダ、FLAC / ALAC / PCM は本体機能です。macOS 向けの LGPL ビルドは公開されておらず、Windows 向けに公開されているものはフルビルドで、切り詰めたものが 1 実行ファイルあたり 4 MB なのに対して 115 MB あり、それがダウンロードのたびに付いてきます。そのため [リリース時に両方をソースからビルドしています](.github/scripts/build-ffmpeg.sh)。対応形式の一覧は 1 か所に置いて共有し、GPL 専用の部品は外してあります。
