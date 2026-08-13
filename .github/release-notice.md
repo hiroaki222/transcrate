@@ -12,7 +12,7 @@
 >
 > ### If it will not open the first time
 >
-> macOS and Windows warn about any app that has not been signed with a paid certificate. Nothing is wrong with the download. Allow it once and it opens normally from then on.
+> macOS and Windows warn about any app that has not been signed with a paid certificate, and this one is not signed. The warning is the only thing standing between a download and your machine, so check before you wave it past: that you are on this repository's own releases page, and that the file is the one named below. Allowed once, it opens normally from then on.
 >
 > **macOS** — System Settings → Privacy & Security → scroll to the bottom → **Open Anyway** → enter your password. [The official macOS instructions](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac)
 >
@@ -33,7 +33,7 @@
 >
 > ### 初回起動時に警告が出たら
 >
-> 有料の開発者証明書を取得していないため、macOS と Windows は初回起動時に警告を表示します。ダウンロードしたファイルに問題があるわけではありません。一度だけ許可すれば、次回からは通常どおり起動します。
+> 有料の開発者証明書を取得していないため、macOS と Windows は初回起動時に警告を表示します。この警告は、ダウンロードしたファイルと自分のマシンのあいだに立つ最後の関門です。回避する前に、このリポジトリのリリースページから、上に挙げた名前のファイルを入手したことを確かめてください。一度許可すれば、次回からは通常どおり起動します。
 >
 > **macOS** — システム設定 → プライバシーとセキュリティ → 一番下までスクロール → **「このまま開く」** → パスワードを入力。[macOS 公式の手順](https://support.apple.com/ja-jp/guide/mac-help/mh40616/mac)
 >

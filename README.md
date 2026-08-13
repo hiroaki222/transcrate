@@ -360,7 +360,6 @@ put in front of the encoder actually work.
 
 ## Next
 
-- Read a stick's contents, not only its filesystem
 - `--json`, so other programs can act on the verdicts
 
 Apple silicon only on macOS. The last Intel Mac shipped in 2020, and supporting

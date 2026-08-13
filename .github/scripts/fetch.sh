@@ -18,8 +18,10 @@ url="${1:?url}"
 out="${2:?output}"
 
 for attempt in 1 2 3 4 5; do
+  # --max-time as well as --connect-timeout: a server that answers and then
+  # stops sending holds the build open until the runner is killed.
   if curl --fail --silent --show-error --location \
-       --retry 3 --retry-all-errors --connect-timeout 20 \
+       --retry 3 --retry-all-errors --connect-timeout 20 --max-time 600 \
        --output "$out" "$url"
   then
     echo "fetched $out on attempt $attempt"

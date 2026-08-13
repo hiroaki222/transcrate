@@ -282,7 +282,6 @@ cargo test --all-features
 
 ## これから
 
-- USB のファイルシステムだけでなく、中身も走査する
 - `--json` 出力。他のプログラムから判定を扱えるようにする
 
 macOS は Apple Silicon のみに対応しています。Intel Mac は 2020 年を最後に出ておらず、対応するには ffmpeg をもう一つビルドして universal バンドルを組む必要があるためです。
