@@ -12,7 +12,12 @@ use crate::device::Codec;
 ///
 /// One list, used to sweep a folder, to build the shell completion and to
 /// filter a drop — so the three cannot drift apart.
-pub const AUDIO_EXTENSIONS: [&str; 8] = ["wav", "flac", "aif", "aiff", "m4a", "mp3", "aac", "mp4"];
+///
+/// `.mp4` is not here. A music video carries an AAC stream like a track does,
+/// and reading only the audio would judge one as a track and report it as
+/// playing everywhere. A folder of sets with a video in it is an ordinary
+/// thing to have.
+pub const AUDIO_EXTENSIONS: [&str; 7] = ["wav", "flac", "aif", "aiff", "m4a", "mp3", "aac"];
 
 /// Where converted files go.
 pub const OUTPUT_FOLDER: &str = "_transcrate";
