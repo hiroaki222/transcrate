@@ -37,7 +37,7 @@ impl Settings {
     fn target(&self) -> Result<Target, String> {
         let base = Target::by_name(&self.profile)
             .or_else(|| Target::from_format(&self.profile))
-            .ok_or_else(|| format!("{} という変換先はありません", self.profile))?;
+            .ok_or_else(|| format!("no target named {}", self.profile))?;
 
         let metadata = if self.keep_comment {
             MetadataPolicy::DJ
@@ -62,7 +62,7 @@ impl Settings {
 
         self.devices
             .iter()
-            .map(|id| device::by_id(id).ok_or_else(|| format!("{id} という機材はありません")))
+            .map(|id| device::by_id(id).ok_or_else(|| format!("no player named {id}")))
             .collect()
     }
 }
