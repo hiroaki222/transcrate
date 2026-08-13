@@ -18,6 +18,7 @@ export function UtilityPanel({ choice, onChange }: Props) {
         <div className="choices">
           {CHOICES.map((option) => (
             <button
+              aria-pressed={choice === option}
               className="choice"
               data-on={choice === option ? "" : undefined}
               key={option}

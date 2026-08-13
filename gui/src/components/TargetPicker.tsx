@@ -36,6 +36,7 @@ export function TargetPicker({ profile, onChange }: Props) {
 
     return (
       <button
+        aria-pressed={profile === id}
         className="card"
         data-on={profile === id ? "" : undefined}
         key={id}
@@ -53,23 +54,34 @@ export function TargetPicker({ profile, onChange }: Props) {
     );
   };
 
+  const direct = DIRECT.includes(profile);
+  const showing = more || direct;
+
   return (
     <section className="target">
       <div className="target-head">
         <span className="target-key">{t.toolbar.target}</span>
         <span className="push" />
-        <button
-          className="box-btn"
-          data-on={more ? "" : undefined}
-          onClick={() => setMore((was) => !was)}
-          type="button"
-        >
-          {more ? t.toolbar.less : t.toolbar.more}
-        </button>
+        {/*
+          No way to close on a format that is only shown here: collapsing the
+          section would take the chosen card with it and leave the screen
+          claiming nothing is selected.
+        */}
+        {!direct && (
+          <button
+            aria-expanded={showing}
+            className="box-btn"
+            data-on={more ? "" : undefined}
+            onClick={() => setMore((was) => !was)}
+            type="button"
+          >
+            {more ? t.toolbar.less : t.toolbar.more}
+          </button>
+        )}
       </div>
 
       <div className="cards">{MAIN.map(card)}</div>
-      {more && <div className="cards">{DIRECT.map(card)}</div>}
+      {showing && <div className="cards">{DIRECT.map(card)}</div>}
     </section>
   );
 }

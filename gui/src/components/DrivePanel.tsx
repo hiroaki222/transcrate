@@ -129,6 +129,7 @@ export function DrivePanel({
           <div className="usb-list-body">
             {mounted?.map((found) => (
               <button
+                aria-pressed={found.mountPoint === at}
                 className="stick"
                 data-on={found.mountPoint === at ? "" : undefined}
                 key={found.mountPoint}

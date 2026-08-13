@@ -40,6 +40,9 @@ export function TrackRow({
       data-sel={selected ? "" : undefined}
       onClick={onSelect}
       onKeyDown={(event) => {
+        // Only the row itself. Enter on the remove button inside it reaches
+        // here too, and would take the track out and open it in one press.
+        if (event.target !== event.currentTarget) return;
         if (event.key === "Enter" || event.key === " ") onSelect();
       }}
       role="button"

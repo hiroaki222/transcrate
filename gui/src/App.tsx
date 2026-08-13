@@ -311,6 +311,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
       <nav className="tabs">
         {tabs.map(([id, label]) => (
           <button
+            aria-pressed={tab === id}
             className="tab"
             data-on={tab === id ? "" : undefined}
             key={id}
@@ -328,6 +329,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
             <DevicePicker chosen={chosen} onChange={setChosen} rows={rows} />
 
             <button
+              aria-pressed={keepComment}
               className="box-btn"
               data-on={keepComment ? "" : undefined}
               onClick={() => setKeepComment((on) => !on)}
@@ -336,6 +338,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
               {t.toolbar.keepComment}
             </button>
             <button
+              aria-pressed={artwork}
               className="box-btn"
               data-on={artwork ? "" : undefined}
               onClick={() => setArtwork((on) => !on)}
