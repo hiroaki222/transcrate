@@ -67,6 +67,10 @@ impl Settings {
     }
 }
 
+/// Said of a folder the sweep could not list. Whatever audio was inside it was
+/// never planned, so without this the list simply comes back shorter.
+const UNREADABLE_FOLDER: &str = "could not be read, and nothing inside it was checked";
+
 /// One file's outcome, kept alongside the index it was given at.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -132,7 +136,8 @@ async fn inspect(
 fn examine(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<Track>, String> {
     let target = settings.target()?;
     let players = settings.players()?;
-    let inputs = gather(paths, PreviousOutput::Skip);
+    let found = gather(paths, PreviousOutput::Skip);
+    let inputs = found.files;
 
     let done = AtomicUsize::new(0);
     let prepared = convert::prepare_all(
@@ -152,13 +157,21 @@ fn examine(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec
         },
     );
 
-    let tracks = inputs
+    // A folder that would not open holds tracks nobody will see otherwise.
+    // Listed as itself, it says so where the tracks it hid would have been.
+    let tracks = found
+        .unreadable
         .iter()
-        .zip(prepared)
-        .map(|(input, outcome)| match outcome {
-            Ok(job) => describe(input, &job, &players),
-            Err(error) => Track::unreadable(input, error.to_string()),
-        })
+        .map(|folder| Track::unreadable(folder, UNREADABLE_FOLDER.to_owned()))
+        .chain(
+            inputs
+                .iter()
+                .zip(prepared)
+                .map(|(input, outcome)| match outcome {
+                    Ok(job) => describe(input, &job, &players),
+                    Err(error) => Track::unreadable(input, error.to_string()),
+                }),
+        )
         .collect();
 
     report(app, "inspect", inputs.len(), inputs.len(), Path::new(""));
@@ -195,7 +208,8 @@ async fn convert_all(
 
 fn encode(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<Outcome>, String> {
     let target = settings.target()?;
-    let inputs = gather(paths, PreviousOutput::Skip);
+    let found = gather(paths, PreviousOutput::Skip);
+    let inputs = found.files;
 
     let concurrency = parallel::default_concurrency();
     let prepared = convert::prepare_all(
@@ -208,7 +222,16 @@ fn encode(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<
     );
 
     let mut jobs = Vec::new();
-    let mut failures = Vec::new();
+    let mut failures: Vec<Outcome> = found
+        .unreadable
+        .iter()
+        .map(|folder| Outcome {
+            path: folder.display().to_string(),
+            name: view::file_name(folder),
+            output_path: String::new(),
+            error: Some(UNREADABLE_FOLDER.to_owned()),
+        })
+        .collect();
 
     for (input, outcome) in inputs.iter().zip(prepared) {
         match outcome {
@@ -416,7 +439,7 @@ fn sweep(app: &AppHandle, path: &str, settings: &Settings) -> Result<Option<Cont
     }))
 }
 
-fn gather(paths: &[String], previous: PreviousOutput) -> Vec<PathBuf> {
+fn gather(paths: &[String], previous: PreviousOutput) -> files::Found {
     let paths: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
     files::collect(&paths, previous)
 }

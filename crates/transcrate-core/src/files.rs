@@ -44,25 +44,38 @@ pub enum PathError {
 /// the extension does. Several at once came from a glob or a drop, and both
 /// hand over the artwork and the playlists too — so there, only audio comes
 /// through.
-pub fn collect(paths: &[PathBuf], previous: PreviousOutput) -> Vec<PathBuf> {
+pub fn collect(paths: &[PathBuf], previous: PreviousOutput) -> Found {
     let handed_over_in_bulk = paths.len() > 1;
-    let mut found = Vec::new();
+    let mut found = Found::default();
 
     for path in paths {
         if path.is_dir() {
             sweep(path, previous, &mut found);
         } else if !handed_over_in_bulk || is_audio(path) {
-            found.push(path.clone());
+            found.files.push(path.clone());
         }
     }
 
     // read_dir returns entries in whatever order the filesystem holds them,
     // which would make the report jump around between runs.
-    found.sort();
+    found.files.sort();
+    found.unreadable.sort();
     found
 }
 
-fn sweep(directory: &Path, previous: PreviousOutput, into: &mut Vec<PathBuf>) {
+/// What a set of paths expanded to.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Found {
+    /// Every audio file, in a stable order.
+    pub files: Vec<PathBuf>,
+    /// Folders that could not be listed in full: permission refused, a drive
+    /// pulled out part way through, a directory the filesystem would not read.
+    /// Whatever audio is inside them is missing from `files`, so a caller that
+    /// drops this reports a partial run as a complete one.
+    pub unreadable: Vec<PathBuf>,
+}
+
+fn sweep(directory: &Path, previous: PreviousOutput, into: &mut Found) {
     let is_previous_output = directory
         .file_name()
         .is_some_and(|name| name == OUTPUT_FOLDER);
@@ -72,10 +85,20 @@ fn sweep(directory: &Path, previous: PreviousOutput, into: &mut Vec<PathBuf>) {
     }
 
     let Ok(entries) = std::fs::read_dir(directory) else {
+        into.unreadable.push(directory.to_path_buf());
         return;
     };
 
-    for entry in entries.flatten() {
+    // A folder can open and still not give up all of it, and a track lost that
+    // way is as absent as one behind a folder that would not open at all.
+    let mut partial = false;
+
+    for entry in entries {
+        let Ok(entry) = entry else {
+            partial = true;
+            continue;
+        };
+
         // read_dir's own file type, which does not follow symlinks — unlike
         // Path::is_dir, which does. A folder holding a link back to one above
         // it is an ordinary thing to have, and following it means descending
@@ -85,6 +108,7 @@ fn sweep(directory: &Path, previous: PreviousOutput, into: &mut Vec<PathBuf>) {
         // somebody who keeps their library as links to tracks elsewhere means
         // those tracks, so it still falls through to the audio check below.
         let Ok(kind) = entry.file_type() else {
+            partial = true;
             continue;
         };
         let path = entry.path();
@@ -92,8 +116,12 @@ fn sweep(directory: &Path, previous: PreviousOutput, into: &mut Vec<PathBuf>) {
         if kind.is_dir() {
             sweep(&path, previous, into);
         } else if is_audio(&path) {
-            into.push(path);
+            into.files.push(path);
         }
+    }
+
+    if partial {
+        into.unreadable.push(directory.to_path_buf());
     }
 }
 
@@ -175,6 +203,7 @@ mod tests {
         std::fs::write(dir.join("notes.txt"), b"").expect("write");
 
         let names: Vec<_> = collect(&[dir], PreviousOutput::Skip)
+            .files
             .iter()
             .filter_map(|path| path.file_name())
             .map(|name| name.to_string_lossy().into_owned())
@@ -196,6 +225,7 @@ mod tests {
 
         let names = |previous| {
             collect(std::slice::from_ref(&dir), previous)
+                .files
                 .iter()
                 .filter_map(|path| path.file_name())
                 .map(|name| name.to_string_lossy().into_owned())
@@ -222,8 +252,8 @@ mod tests {
 
         let found = collect(&[dir.join("Music")], PreviousOutput::Skip);
 
-        assert_eq!(found.len(), 1, "found: {found:?}");
-        assert!(found[0].ends_with("track.wav"));
+        assert_eq!(found.files.len(), 1, "found: {found:?}");
+        assert!(found.files[0].ends_with("track.wav"));
     }
 
     /// Only the descent is guarded. Somebody who keeps a library as links to
@@ -239,8 +269,41 @@ mod tests {
 
         let found = collect(&[dir.join("Library")], PreviousOutput::Skip);
 
-        assert_eq!(found.len(), 1, "found: {found:?}");
-        assert!(found[0].ends_with("linked.wav"));
+        assert_eq!(found.files.len(), 1, "found: {found:?}");
+        assert!(found.files[0].ends_with("linked.wav"));
+    }
+
+    /// A folder written by another account, or a drive that comes loose part
+    /// way through, used to end the sweep of that branch in silence: the tracks
+    /// behind it were never planned, never converted, and never mentioned.
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_that_will_not_open_is_named_rather_than_skipped() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = scratch("collect-unreadable");
+        std::fs::write(dir.join("visible.wav"), b"").expect("write");
+
+        let shut = dir.join("shut");
+        std::fs::create_dir(&shut).expect("subdir");
+        std::fs::write(shut.join("hidden.wav"), b"").expect("write");
+        std::fs::set_permissions(&shut, std::fs::Permissions::from_mode(0o000))
+            .expect("close the folder");
+
+        // Root ignores the bit, and CI containers often are root. There the
+        // folder opens and there is nothing here to test.
+        if std::fs::read_dir(&shut).is_ok() {
+            std::fs::set_permissions(&shut, std::fs::Permissions::from_mode(0o755))
+                .expect("reopen");
+            return;
+        }
+
+        let found = collect(std::slice::from_ref(&dir), PreviousOutput::Skip);
+        std::fs::set_permissions(&shut, std::fs::Permissions::from_mode(0o755)).expect("reopen");
+
+        assert_eq!(found.files.len(), 1, "what was reached is still found");
+        assert_eq!(found.unreadable.len(), 1);
+        assert!(found.unreadable[0].ends_with("shut"));
     }
 
     /// One path named on its own is taken at its word, whatever it is called.
@@ -253,7 +316,7 @@ mod tests {
         std::fs::write(&odd, b"").expect("write");
 
         assert_eq!(
-            collect(std::slice::from_ref(&odd), PreviousOutput::Skip),
+            collect(std::slice::from_ref(&odd), PreviousOutput::Skip).files,
             vec![odd]
         );
     }
@@ -274,6 +337,7 @@ mod tests {
             .collect();
 
         let names: Vec<_> = collect(&expanded, PreviousOutput::Skip)
+            .files
             .iter()
             .filter_map(|path| path.file_name())
             .map(|name| name.to_string_lossy().into_owned())

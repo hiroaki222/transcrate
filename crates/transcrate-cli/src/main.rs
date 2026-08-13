@@ -337,6 +337,19 @@ fn run_retag(args: &RetagArgs) -> ExitCode {
     )
 }
 
+/// Name the folders the sweep could not list.
+///
+/// Whatever audio was behind them is missing from every count that follows, so
+/// leaving them unsaid turns a partial run into one that looks complete.
+fn report_unreadable(folders: &[PathBuf]) {
+    for folder in folders {
+        eprintln!(
+            "{}: could not be read, and nothing inside it was checked",
+            folder.display()
+        );
+    }
+}
+
 /// Plan every input, run the lot, and report as each lands.
 ///
 /// `target_for` is handed each file's own format, so a caller can either fix
@@ -353,17 +366,21 @@ fn run_jobs(
 
     // Plan everything before encoding anything, so a file that cannot be read
     // is named straight away rather than after minutes of work on the rest.
-    let inputs = files::collect(files, PreviousOutput::Skip);
-    if inputs.is_empty() {
+    let found = files::collect(files, PreviousOutput::Skip);
+    report_unreadable(&found.unreadable);
+
+    if found.files.is_empty() {
         eprintln!("no audio files among the paths given");
         return ExitCode::FAILURE;
     }
 
     let prepared =
-        convert::prepare_all(&inputs, into, ffprobe, target_for, concurrency, &|_, _| {});
+        convert::prepare_all(&found.files, into, ffprobe, target_for, concurrency, &|_, _| {});
 
     let mut planned = Vec::new();
-    let mut all_done = true;
+    // A folder that would not open is a failure of the run, not a detail of it:
+    // tracks behind it were never planned and never converted.
+    let mut all_done = found.unreadable.is_empty();
 
     for outcome in prepared {
         match outcome {
@@ -811,7 +828,10 @@ fn run_check(
         }
     };
 
-    let inputs = files::collect(files, PreviousOutput::Include);
+    let found = files::collect(files, PreviousOutput::Include);
+    report_unreadable(&found.unreadable);
+
+    let inputs = found.files;
     if inputs.is_empty() {
         eprintln!("no audio files among the paths given");
         return ExitCode::FAILURE;
@@ -831,7 +851,8 @@ fn run_check(
 
     progress.clear();
 
-    let mut all_clear = true;
+    // Nothing here can be called clear while part of the tree went unread.
+    let mut all_clear = found.unreadable.is_empty();
     let mut rejected_count = 0usize;
 
     for (file, outcome) in inputs.iter().zip(specs) {
