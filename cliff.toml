@@ -24,15 +24,21 @@ filter_commits = true
 topo_order = false
 sort_commits = "newest"
 
+# First match wins, so everything skipped comes first. A `fix(ci)` reached the
+# `^fix` line before it ever reached `^ci`, and turned up in the notes under
+# Fixes — which reads, to somebody about to download a DJ tool, as though
+# something they use had been broken.
 commit_parsers = [
+  # Internal by scope, whatever the type precedes it.
+  { message = '^\w+\(ci\)', skip = true },
+  { message = "^chore", skip = true },
+  { message = "^ci", skip = true },
   { message = "^feat", group = "Features" },
   { message = "^fix", group = "Fixes" },
   { message = "^perf", group = "Performance" },
   { message = "^refactor", group = "Refactoring" },
   { message = "^docs", group = "Documentation" },
   { message = "^test", group = "Tests" },
-  # Housekeeping and CI changes are real work but not news to a user.
-  { message = "^chore", skip = true },
-  { message = "^ci", skip = true },
-  { message = "^build", skip = true },
+  # Not skipped: what this changes is the size and contents of the download.
+  { message = "^build", group = "Packaging" },
 ]
