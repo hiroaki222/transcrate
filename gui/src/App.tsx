@@ -4,7 +4,15 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 
-import type { DeviceRow, Outcome, Progress, ConvertOptions, Tools, Track } from "./api";
+import type {
+  DeviceRow,
+  Mounted,
+  Outcome,
+  Progress,
+  ConvertOptions,
+  Tools,
+  Track,
+} from "./api";
 import {
   convertAll,
   devices as loadDevices,
@@ -83,6 +91,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
   const [selected, setSelected] = useState<string | null>(null);
   const [outcomes, setOutcomes] = useState<Outcome[] | null>(null);
 
+  const [sticks, setSticks] = useState<Mounted[]>([]);
   const [busy, setBusy] = useState<"inspect" | "convert" | "scan" | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -203,6 +212,11 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
 
   const failing = tracks.filter(
     (track) => track.error !== null || track.now.some((lamp) => !lamp.ok),
+  ).length;
+
+  // A stick any chosen player refuses is one to deal with before the gig.
+  const refusedSticks = sticks.filter(
+    (stick) => stick.readable < stick.players,
   ).length;
 
   const converted = outcomes?.filter((outcome) => outcome.error === null).length ?? 0;
@@ -336,6 +350,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
         <DrivePanel
           chosen={chosen}
           onChooseDevices={setChosen}
+          onDrives={setSticks}
           onScanning={onScanning}
           rows={rows}
           settings={settings}
@@ -354,7 +369,20 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
             once puts one TRACKS directly below another holding a different
             number.
           */
-          tab !== "drive" && (
+          tab === "drive" ? (
+            <>
+              <span className="cell">
+                <span className="cell-key">USB</span>
+                <span className="cell-val">{sticks.length}</span>
+              </span>
+              <span className="cell">
+                <span className="cell-key">REJECTED</span>
+                <span className={refusedSticks > 0 ? "cell-val ng" : "cell-val"}>
+                  {refusedSticks}
+                </span>
+              </span>
+            </>
+          ) : (
             <>
               <span className="cell">
                 <span className="cell-key">TRACKS</span>

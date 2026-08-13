@@ -52,8 +52,21 @@ export type DeviceRow = {
   maxFolderDepth: number;
 };
 
+export type Mounted = {
+  mountPoint: string;
+  name: string;
+  filesystem: string | null;
+  reportedAs: string;
+  /** How many of the chosen players read it, out of how many were chosen. */
+  readable: number;
+  players: number;
+  totalBytes: number;
+  freeBytes: number;
+};
+
 export type Drive = {
   mountPoint: string;
+  name: string;
   filesystem: string | null;
   reportedAs: string;
   lamps: Lamp[];
@@ -114,6 +127,9 @@ export const inspect = (paths: string[], settings: ConvertOptions) =>
 
 export const convertAll = (paths: string[], settings: ConvertOptions) =>
   invoke<Outcome[]>("convert_all", { paths, settings });
+
+export const drives = (settings: ConvertOptions) =>
+  invoke<Mounted[]>("drives", { settings });
 
 export const checkDrive = (path: string, settings: ConvertOptions) =>
   invoke<Drive | null>("check_drive", { path, settings });

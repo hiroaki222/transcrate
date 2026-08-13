@@ -121,12 +121,13 @@ Examples:
     /// being able to damage it.
     #[command(after_help = "\
 Examples:
+  transcrate usb                            List what is plugged in
   transcrate usb /Volumes/DJ                Against every player
   transcrate usb /Volumes/DJ -d xdj-rr      Against the one in tonight's booth")]
     Usb {
-        /// The drive, or any path on it.
+        /// The drive, or any path on it. Left out, every drive is listed.
         #[arg(value_name = "PATH", value_hint = ValueHint::DirPath)]
-        path: PathBuf,
+        path: Option<PathBuf>,
 
         /// Players to check against, comma-separated. Defaults to all of them.
         #[arg(
@@ -261,7 +262,10 @@ fn main() -> ExitCode {
             devices,
             no_tracks,
             ffprobe,
-        } => run_usb(&path, &devices, (!no_tracks).then_some(ffprobe.as_path())),
+        } => match path {
+            Some(path) => run_usb(&path, &devices, (!no_tracks).then_some(ffprobe.as_path())),
+            None => list_drives(),
+        },
         Command::Completions { shell } => {
             write_completions(shell, &mut std::io::stdout());
             ExitCode::SUCCESS
@@ -388,6 +392,38 @@ fn run_jobs(
     }
 }
 
+/// Name every drive that could be carried to a gig.
+///
+/// Answering "what is it called and where is it mounted" is most of what stands
+/// between plugging a stick in and being able to ask about it — on a Mac the
+/// mount point is not something anyone has memorised.
+fn list_drives() -> ExitCode {
+    let drives = usb::drives();
+
+    if drives.is_empty() {
+        eprintln!("nothing removable is plugged in");
+        return ExitCode::FAILURE;
+    }
+
+    for drive in &drives {
+        // Whatever the system called it, where this program has no name of its
+        // own for it: an unrecognised filesystem is worth showing as it is.
+        let filesystem = match drive.filesystem {
+            Some(known) => filesystem_name(known),
+            None => drive.reported_as.as_str(),
+        };
+
+        println!(
+            "{:<20} {:<8} {}",
+            drive.name,
+            filesystem,
+            drive.mount_point.display()
+        );
+    }
+
+    ExitCode::SUCCESS
+}
+
 /// Report which players will read a drive, and what is on it.
 ///
 /// Exits non-zero when any of the named players will not, so this can gate a
@@ -415,11 +451,27 @@ fn run_usb(path: &Path, device_ids: &[String], ffprobe: Option<&Path>) -> ExitCo
 
     println!("{}", drive.mount_point.display());
 
-    let Some(filesystem) = drive.filesystem else {
+    // A filesystem no player reads does not end the report. What is written to
+    // the drive has to be put right too, and finding that out only after
+    // reformatting means doing the work twice. The window has always said both.
+    let refused = if let Some(filesystem) = drive.filesystem {
+        report_readers(filesystem, &players)
+    } else {
         println!("  {} — no player reads this", drive.reported_as);
-        return ExitCode::FAILURE;
+        players.len()
     };
 
+    let clean = report_contents(&drive.mount_point, &players, ffprobe);
+
+    if refused == 0 && clean {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// Which of `players` read this filesystem, returning how many will not.
+fn report_readers(filesystem: FileSystem, players: &[&'static DeviceProfile]) -> usize {
     let name = filesystem_name(filesystem);
     println!("  {name}\n");
 
@@ -451,13 +503,7 @@ fn run_usb(path: &Path, device_ids: &[String], ffprobe: Option<&Path>) -> ExitCo
         println!("  {:<14} {verdict}", player.display_name);
     }
 
-    let clean = report_contents(&drive.mount_point, &players, ffprobe);
-
-    if refused == 0 && clean {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
-    }
+    refused
 }
 
 /// How many offending paths to name before summarising the rest.

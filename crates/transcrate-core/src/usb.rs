@@ -24,12 +24,53 @@ pub struct Readers {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Drive {
     pub mount_point: PathBuf,
+    /// The volume label — what it is called in Finder, and the only part of
+    /// this anyone recognises their own stick by.
+    pub name: String,
     /// `None` when the filesystem is one no player reads, which is worth
     /// saying rather than forcing into the nearest family.
     pub filesystem: Option<FileSystem>,
     /// The name the operating system gave it, kept for the cases this program
     /// does not recognise.
     pub reported_as: String,
+    /// How much the drive holds, and how much of that is still free. Bytes,
+    /// because deciding what unit to show it in belongs to whatever displays it.
+    pub total_bytes: u64,
+    pub free_bytes: u64,
+}
+
+/// Every drive that could be carried to a gig.
+///
+/// Removable ones only, which is what separates a stick from the machine's own
+/// disk. Nothing else is filtered: a mounted disk image is removable too and
+/// will appear, and hiding a volume somebody can see in their file manager
+/// would be the worse surprise of the two.
+pub fn drives() -> Vec<Drive> {
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+
+    let mut found: Vec<Drive> = disks
+        .iter()
+        .filter(|disk| disk.is_removable())
+        .map(describe)
+        .collect();
+
+    // read_dir order for disks: whatever the system holds them in, which would
+    // make the list reorder itself between one look and the next.
+    found.sort_by(|a, b| a.mount_point.cmp(&b.mount_point));
+    found
+}
+
+fn describe(disk: &sysinfo::Disk) -> Drive {
+    let reported_as = disk.file_system().to_string_lossy().into_owned();
+
+    Drive {
+        mount_point: disk.mount_point().to_path_buf(),
+        name: disk.name().to_string_lossy().into_owned(),
+        filesystem: recognise(&reported_as),
+        reported_as,
+        total_bytes: disk.total_space(),
+        free_bytes: disk.available_space(),
+    }
 }
 
 /// Identify the drive holding `path`.
@@ -53,13 +94,7 @@ pub fn drive_at(path: &Path) -> Option<Drive> {
         .filter(|disk| path.starts_with(disk.mount_point()))
         .max_by_key(|disk| disk.mount_point().as_os_str().len())?;
 
-    let reported_as = disk.file_system().to_string_lossy().into_owned();
-
-    Some(Drive {
-        mount_point: disk.mount_point().to_path_buf(),
-        filesystem: recognise(&reported_as),
-        reported_as,
-    })
+    Some(describe(disk))
 }
 
 /// Split players by whether they will read this filesystem.
@@ -135,6 +170,30 @@ mod tests {
 
         assert_eq!(recognise("ntfs"), Some(FileSystem::Ntfs));
         assert_eq!(recognise("NTFS"), Some(FileSystem::Ntfs));
+    }
+
+    /// Whatever is plugged into the machine running this, the list has to hold
+    /// only removable volumes and stay in the same order between two looks —
+    /// a picker that reshuffles itself is one you cannot click.
+    #[test]
+    fn the_list_is_removable_volumes_in_a_settled_order() {
+        let once = drives();
+        let twice = drives();
+
+        assert_eq!(once, twice);
+        assert!(
+            once.windows(2)
+                .all(|w| w[0].mount_point <= w[1].mount_point)
+        );
+
+        // The machine's own disk is not something anyone carries to a gig.
+        assert!(!once.iter().any(|drive| drive.mount_point == Path::new("/")));
+
+        // Every one of them has to be answerable by the single-drive path too,
+        // or the picker would offer something the check cannot then look at.
+        for drive in &once {
+            assert_eq!(drive_at(&drive.mount_point).as_ref(), Some(drive));
+        }
     }
 
     /// A Mac's own disk is not something any player reads, and reporting it as

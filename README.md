@@ -204,6 +204,18 @@ non-zero if anything is rejected, so it can gate a script.
 
 ### Checking a drive
 
+Named with no path, it lists what is plugged in — on a Mac nobody has the
+mount point memorised:
+
+```sh
+transcrate usb
+```
+
+```
+DJ                   exFAT    /Volumes/DJ
+KOMORI               FAT32    /Volumes/KOMORI
+```
+
 ```sh
 transcrate usb /Volumes/DJ
 ```

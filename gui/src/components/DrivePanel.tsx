@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 
-import type { Contents, DeviceRow, Drive, ConvertOptions } from "../api";
-import { checkDrive, scanDrive } from "../api";
+import type { Contents, DeviceRow, Drive, Mounted, ConvertOptions } from "../api";
+import { checkDrive, drives as listDrives, scanDrive } from "../api";
 import { useStrings } from "../strings";
 import { DevicePicker } from "./DevicePicker";
 import { LampStrip } from "./LampStrip";
@@ -13,6 +12,8 @@ type Props = {
   chosen: string[];
   onChooseDevices: (chosen: string[]) => void;
   onScanning: (running: boolean) => void;
+  /** So the status bar can carry the drive counts while this screen is open. */
+  onDrives: (found: Mounted[]) => void;
 };
 
 /**
@@ -29,6 +30,7 @@ export function DrivePanel({
   chosen,
   onChooseDevices,
   onScanning,
+  onDrives,
 }: Props) {
   const t = useStrings();
 
@@ -37,9 +39,26 @@ export function DrivePanel({
   const [contents, setContents] = useState<Contents | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function choose() {
-    const picked = await open({ directory: true, title: t.dialog.pickDrive });
-    if (typeof picked === "string") setAt(picked);
+  const [mounted, setMounted] = useState<Mounted[] | null>(null);
+  const [looking, setLooking] = useState(false);
+
+  /*
+    Asked again on every look rather than once at startup. Plugging a stick in
+    after opening the app is the ordinary case, and a list that cannot answer
+    that is a list nobody trusts.
+  */
+  function look() {
+    setLooking(true);
+    void listDrives(settings)
+      .then((found) => {
+        setMounted(found);
+        onDrives(found);
+        // One drive is not a choice. Somebody with a single stick plugged in
+        // has already said which one they mean by plugging it in.
+        const only = found.length === 1 ? found[0] : undefined;
+        if (only !== undefined) setAt(only.mountPoint);
+      })
+      .finally(() => setLooking(false));
   }
 
   /*
@@ -48,6 +67,8 @@ export function DrivePanel({
     what is already written to it.
   */
   const players = settings.devices.join(",");
+
+  useEffect(look, [players]);
 
   useEffect(() => {
     if (at === null) return;
@@ -78,68 +99,152 @@ export function DrivePanel({
     };
   }, [at, players]);
 
+  const chosenDrive = mounted?.find((found) => found.mountPoint === at);
   const unreadable = drive?.lamps.filter((lamp) => !lamp.ok) ?? [];
   const filesystem = drive?.filesystem ?? drive?.reportedAs ?? "";
 
   return (
     <div className="pane">
       <div className="bar">
-        <button className="box-btn" type="button" onClick={choose}>
-          {t.drive.pick}
-        </button>
         <DevicePicker chosen={chosen} onChange={onChooseDevices} rows={rows} />
         <span className="push" />
         <span className="modetag">{t.drive.readOnly}</span>
       </div>
 
-      {drive === null ? (
-        <div className="empty">
-          <div className="empty-title">{t.drive.emptyTitle}</div>
-          <div className="empty-note">{t.drive.emptyNote}</div>
-          {message !== null && <div className="empty-note">{message}</div>}
-        </div>
-      ) : (
-        <div className="drive">
-          <div className="drive-head">
-            <div className="drive-line">
-              <span className="drive-name">{drive.mountPoint}</span>
-              <span className="tag">{filesystem}</span>
-            </div>
-            <div className="drive-answer">
-              {unreadable.length === 0 ? (
-                t.drive.allRead(drive.lamps.length)
-              ) : (
-                <span className="ng">{t.drive.someFail(unreadable.length)}</span>
-              )}
-            </div>
+      {/*
+        Two panes, as the players lay this out: what is plugged in on the left,
+        and everything known about the one chosen on the right. The list stays
+        visible while the right side is read, so moving between two sticks is
+        one click rather than a trip back to a picker.
+      */}
+      <div className="usb">
+        <aside className="usb-list">
+          <div className="usb-list-head">
+            <span className="usb-list-key">USB</span>
+            <span className="usb-list-count">
+              {t.drive.count(mounted?.length ?? 0)}
+            </span>
           </div>
 
-          <div className="drive-body">
-            <LampStrip when={t.drive.lamps} lamps={drive.lamps} />
+          <div className="usb-list-body">
+            {mounted?.map((found) => (
+              <button
+                className="stick"
+                data-on={found.mountPoint === at ? "" : undefined}
+                key={found.mountPoint}
+                onClick={() => setAt(found.mountPoint)}
+                type="button"
+              >
+                {/*
+                  A bar down the leading edge rather than a colour over the whole
+                  row: the verdict has to survive the row being selected, and a
+                  selected row is already carrying a colour of its own.
+                */}
+                <span
+                  className={found.readable === found.players ? "stick-edge" : "stick-edge ng"}
+                />
+                <span className="stick-name">{found.name}</span>
+                <span className="tag">{found.filesystem ?? found.reportedAs}</span>
+                <span className="stick-free">{t.drive.free(gb(found.freeBytes))}</span>
+                <Tally of={found.players} some={found.readable} />
+              </button>
+            ))}
 
-            {unreadable.length > 0 && (
-              <dl className="why">
-                <div className="why-line">
-                  <dt>{t.track.reasonCount(unreadable.length)}</dt>
+            {mounted?.length === 0 && (
+              <p className="usb-list-none">{t.drive.none}</p>
+            )}
+          </div>
+
+          <button
+            className="box-btn usb-look"
+            disabled={looking}
+            onClick={look}
+            type="button"
+          >
+            {looking ? t.drive.picking : t.drive.refresh}
+          </button>
+        </aside>
+
+        {drive === null ? (
+          <div className="empty">
+            <div className="empty-title">
+              {looking ? t.drive.picking : t.drive.emptyTitle}
+            </div>
+            <div className="empty-note">{t.drive.emptyNote}</div>
+            {message !== null && <div className="empty-note">{message}</div>}
+          </div>
+        ) : (
+          <div className="usb-detail">
+            <div className="usb-detail-head">
+              <span className="usb-detail-name">{drive.name}</span>
+              <span className="tag">{filesystem}</span>
+              <span className="usb-detail-where">{drive.mountPoint}</span>
+            </div>
+
+            <div className="usb-detail-body">
+              <p
+                className={
+                  unreadable.length === 0 ? "verdict" : "verdict ng"
+                }
+              >
+                {unreadable.length === 0
+                  ? t.drive.allRead(drive.lamps.length)
+                  : t.drive.someFail(unreadable.length)}
+              </p>
+
+              <LampStrip when={t.drive.lamps} lamps={drive.lamps} />
+
+              <dl className="facts">
+                <div className="fact">
+                  <dt>{t.drive.capacity}</dt>
                   <dd>
-                    {t.drive.failReason(
-                      filesystem,
-                      unreadable.map((lamp) => lamp.name).join("、"),
-                    )}
+                    {t.drive.gb(gb(chosenDrive?.freeBytes ?? 0))}
+                    <span className="fact-of">
+                      {" / "}
+                      {t.drive.gb(gb(chosenDrive?.totalBytes ?? 0))}
+                    </span>
                   </dd>
                 </div>
-                <div className="why-line">
-                  <dt className="fix">{t.drive.fix}</dt>
-                  <dd>{t.drive.fixNote(drive.lamps.length)}</dd>
+                <div className="fact">
+                  <dt>{t.drive.format}</dt>
+                  <dd>{filesystem}</dd>
+                </div>
+                <div className="fact">
+                  <dt>{t.drive.refused}</dt>
+                  <dd className={unreadable.length > 0 ? "ng" : undefined}>
+                    {unreadable.length === 0
+                      ? t.drive.refusedNone
+                      : unreadable.map((lamp) => lamp.name).join("、")}
+                  </dd>
                 </div>
               </dl>
-            )}
 
-            <ScanReport contents={contents} />
+              <ScanReport contents={contents} />
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
+  );
+}
+
+/**
+ * Bytes as the one figure anybody reads a stick's capacity in.
+ *
+ * Decimal GB rather than binary: it is what the label on the stick says, and
+ * being off by seven per cent from Finder would look like a bug.
+ */
+function gb(bytes: number) {
+  return bytes / 1_000_000_000;
+}
+
+/** How many players read this drive, out of how many were asked about. */
+function Tally({ of, some }: { of: number; some: number }) {
+  return (
+    <span className={some === of ? "tally ok" : "tally ng"}>
+      {some}
+      <span className="tally-of">/{of}</span>
+    </span>
   );
 }
 

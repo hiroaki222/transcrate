@@ -19,7 +19,7 @@ use transcrate_core::files::{self, PreviousOutput};
 use transcrate_core::plan::{Action, MetadataPolicy, Target};
 use transcrate_core::{convert, parallel, scan, usb};
 
-use view::{Contents, DeviceRow, Drive, Lamp, Progress, Tools, Track};
+use view::{Contents, DeviceRow, Drive, Lamp, Mounted, Progress, Tools, Track};
 
 /// What the window has chosen, as it stands when a command is issued.
 #[derive(Debug, Clone, Deserialize)]
@@ -246,6 +246,36 @@ fn encode(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<
     Ok(outcomes)
 }
 
+/// Every drive that could be carried to a gig, for the picker.
+///
+/// Cheap: no file on any of them is opened. The window asks again each time the
+/// screen is opened, because a stick plugged in after the app started is the
+/// ordinary case rather than the exception.
+#[allow(clippy::needless_pass_by_value)]
+#[tauri::command]
+fn drives(settings: Settings) -> Result<Vec<Mounted>, String> {
+    let players = settings.players()?;
+
+    Ok(usb::drives()
+        .into_iter()
+        .map(|drive| Mounted {
+            mount_point: drive.mount_point.display().to_string(),
+            name: drive.name,
+            filesystem: drive.filesystem.map(view::filesystem_name),
+            reported_as: drive.reported_as,
+            readable: drive.filesystem.map_or(0, |filesystem| {
+                players
+                    .iter()
+                    .filter(|player| player.filesystem_support(filesystem) == device::Support::Yes)
+                    .count()
+            }),
+            players: players.len(),
+            total_bytes: drive.total_bytes,
+            free_bytes: drive.free_bytes,
+        })
+        .collect())
+}
+
 /// Which players will read the drive holding `path`.
 #[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
@@ -273,6 +303,7 @@ fn check_drive(path: String, settings: Settings) -> Result<Option<Drive>, String
 
     Ok(Some(Drive {
         mount_point: drive.mount_point.display().to_string(),
+        name: drive.name,
         filesystem: drive.filesystem.map(view::filesystem_name),
         reported_as: drive.reported_as,
         readable: lamps.iter().filter(|lamp| lamp.ok).count(),
@@ -406,6 +437,7 @@ pub fn run() {
             locale,
             devices,
             inspect,
+            drives,
             scan_drive,
             convert_all,
             check_drive
