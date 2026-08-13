@@ -28,6 +28,7 @@ case "$target" in
   macos)
     host=()
     cross=()
+    ldflags=""
     strip_with="strip"
     suffix=""
     cores="$(sysctl -n hw.ncpu)"
@@ -43,6 +44,11 @@ case "$target" in
       --target-os=mingw32
       --arch=x86_64
     )
+    # -static, or the toolchain's own runtime is left as a DLL dependency.
+    # It would resolve on any machine with MSYS2 on its PATH — every runner
+    # this could be tested on — and on no machine belonging to anyone who
+    # downloads this.
+    ldflags="-static"
     strip_with="$triple-strip"
     suffix=".exe"
     cores="$(nproc)"
@@ -105,7 +111,7 @@ PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig" ./configure \
   --prefix="$prefix" \
   --pkg-config-flags="--static" \
   --extra-cflags="-I$prefix/include" \
-  --extra-ldflags="-L$prefix/lib" \
+  --extra-ldflags="-L$prefix/lib $ldflags" \
   --enable-static \
   --disable-shared \
   --disable-doc \

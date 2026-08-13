@@ -117,8 +117,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # nasm, or configure stops: without it the only way forward it offers is
+      # --disable-x86asm, which is its own word for a build with no SIMD in it.
       - if: matrix.target == 'windows'
-        run: sudo apt-get update && sudo apt-get install -y mingw-w64
+        run: sudo apt-get update && sudo apt-get install -y mingw-w64 nasm
 
       - name: Cache the build
         id: cache
@@ -153,8 +155,12 @@ jobs:
 
           # A cross-built binary cannot be run here, so the flags are read out
           # of the file rather than out of `-version`.
-          banner="$(strings -a "ffmpeg-out/ffmpeg$suffix" |
-                    grep -m1 -- '--disable-everything' || true)"
+          # Read whole rather than stopped at the first match: closing the
+          # pipe early leaves `strings` reporting a write error into a build
+          # that is otherwise fine, and a passing job should say nothing.
+          matches="$(strings -a "ffmpeg-out/ffmpeg$suffix" |
+                     grep -- '--disable-everything' || true)"
+          banner="${matches%%$'\n'*}"
           if [ -z "$banner" ]; then
             echo "no configure banner in the binary" >&2
             exit 1
@@ -168,6 +174,21 @@ jobs:
           done
 
           echo "$banner" | tr ' ' '\n' | grep -c -- '--enable-'
+
+          # A DLL the toolchain supplies would resolve on any machine with
+          # MSYS2 installed, which is every runner this could be tried on and
+          # no machine belonging to anyone who downloads it.
+          if [ "${{ matrix.target }}" = windows ]; then
+            objdump=x86_64-w64-mingw32-objdump
+            command -v "$objdump" >/dev/null || objdump=objdump
+            needs="$("$objdump" -p ffmpeg-out/ffmpeg.exe |
+                     awk '/DLL Name:/ { print tolower($3) }' | sort -u)"
+            echo "$needs"
+            if grep -qE 'libwinpthread|libgcc|libstdc\+\+|msys' <<<"$needs"; then
+              echo "the build depends on a DLL that ships with the toolchain" >&2
+              exit 1
+            fi
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
