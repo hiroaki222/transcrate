@@ -619,10 +619,6 @@ select {
   color: var(--red);
 }
 
-.why dt.fix {
-  color: var(--green);
-}
-
 .why dd {
   margin: 0;
   font-size: 12.5px;
@@ -633,33 +629,6 @@ select {
   color: #dbe9f8;
 }
 
-/* ---- drive ---- */
-.drive {
-  display: flex;
-  flex-direction: column;
-}
-
-.drive-head {
-  padding: 16px 14px;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.drive-line {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.drive-name {
-  font-family: var(--read);
-  font-size: 19px;
-  font-weight: 700;
-}
-
 .tag {
   font-family: var(--read);
   font-size: 10.5px;
@@ -668,22 +637,6 @@ select {
   padding: 3px 8px;
   border: 1px solid var(--line);
   color: var(--w-2);
-}
-
-.drive-answer {
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.drive-answer .ng {
-  color: var(--red);
-}
-
-.drive-body {
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
 }
 
 /* ---- the drives plugged in ---- */
@@ -1096,8 +1049,7 @@ table.grid td.yes {
 */
 .note,
 .empty-note,
-.why dd,
-.drive-answer {
+.why dd {
   word-break: auto-phrase;
 }
 
