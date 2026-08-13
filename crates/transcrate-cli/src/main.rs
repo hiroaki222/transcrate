@@ -561,10 +561,21 @@ fn report_contents(
         );
     }
 
-    let mut clean = true;
+    // Every count above is a count of what the walk reached, so anything that
+    // leaves a hole in the tree decides this before a single file is read.
+    let clean = !contents.has_gaps();
+
+    if !contents.unreadable.is_empty() {
+        println!("\n  could not be read, so nothing inside it was checked");
+        list(
+            contents
+                .unreadable
+                .iter()
+                .map(|folder| format!("    {}", relative_to(root, folder))),
+        );
+    }
 
     if !contents.unreachable.is_empty() {
-        clean = false;
         println!(
             "\n  past {} folders deep, so the browser never reaches it",
             limits.folder_depth
@@ -578,7 +589,6 @@ fn report_contents(
     }
 
     for crowded in &contents.crowded {
-        clean = false;
         println!(
             "\n  {} holds {} entries, and the browser lists {}",
             relative_to(root, &crowded.folder),
@@ -606,9 +616,19 @@ fn report_contents(
 
     // Said either way round. A drive with one bad track is mostly good news, and
     // reporting only the failure leaves it to be worked out by subtraction.
+    //
+    // The count is of tracks the walk reached, which on a drive with a hole in
+    // it is not the same as the tracks on the drive. Saying so plainly is the
+    // difference between a promise and a report: "all 12 play" reads as a drive
+    // that is ready even when the folders named above hold another hundred.
     if tracks > 0 {
+        // "found" rather than a claim about the drive. A folder the browser
+        // never reaches, one it cuts short, and one that would not open all
+        // leave tracks outside this number, and only one of the three was ever
+        // walked — so no single word covers what is missing except this one.
+        let found = if clean { "" } else { " found" };
         println!(
-            "\n  {} of {tracks} {} will play on every player named",
+            "\n  {} of the {tracks} {}{found} will play on every player named",
             tracks - failing.len(),
             plural(tracks, "track"),
         );
