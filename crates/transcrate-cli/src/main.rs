@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, PoisonError};
 
 use clap::builder::PossibleValuesParser;
 use clap::{CommandFactory, Parser, Subcommand, ValueHint};
@@ -108,10 +108,10 @@ Examples:
     /// untouched: a lossy file loses nothing to a change of text.
     #[command(after_help = "\
 Examples:
-  transcrate retag ~/Music                      Clear the comment and the lyrics
+  transcrate retag ~/Music                      Clear the lyrics, keep your notes
   transcrate retag ~/Music --no-artwork         Drop the sleeve as well
-  transcrate retag ~/Music --clear-comment --no-artwork
-                                                Drop the sleeve, keep your notes")]
+  transcrate retag ~/Music --clear-comment      Clear a shop's text out of the
+                                                comment, and your notes with it")]
     Retag(RetagArgs),
 
     /// Check a drive before you take it to a gig.
@@ -392,15 +392,18 @@ fn run_jobs(
     }
 
     let total = planned.len();
-    let done = AtomicUsize::new(0);
+    // Held across the line as well as the count. Numbering the lines and then
+    // racing to print them is how [2/3] arrives above [1/3].
+    let done = Mutex::new(0usize);
 
     let results = convert::run_all(ffmpeg, &planned, concurrency, &|index, result| {
-        let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
+        let mut finished = done.lock().unwrap_or_else(PoisonError::into_inner);
+        *finished += 1;
         let job = &planned[index];
         // Where the results are rooted, so a line says where the file went
         // rather than naming the one folder it happens to sit in.
         let root = into.or_else(|| found.base_of(&job.input));
-        report_one(finished, total, job, root, result);
+        report_one(*finished, total, job, root, result);
     });
 
     all_done &= results.iter().all(Result::is_ok);
@@ -605,13 +608,12 @@ fn report_contents(
     };
 
     let progress = Progress::new(tracks);
-    let done = AtomicUsize::new(0);
     let verdicts = scan::judge(
         &contents.tracks,
         ffprobe,
         players,
         parallel::default_concurrency(),
-        &|_| progress.show(done.fetch_add(1, Ordering::Relaxed) + 1),
+        &|_| progress.advance(),
     );
     progress.clear();
 
@@ -869,7 +871,6 @@ fn run_check(
     }
 
     let progress = Progress::new(inputs.len());
-    let done = AtomicUsize::new(0);
 
     // Read every file first, then report. Probing is one process per file and
     // parallelises; the report has to stay in the order the files were given.
@@ -877,7 +878,7 @@ fn run_check(
         &inputs,
         parallel::default_concurrency(),
         &|_, file| probe::run(ffprobe, file),
-        &|_, _| progress.show(done.fetch_add(1, Ordering::Relaxed) + 1),
+        &|_, _| progress.advance(),
     );
 
     progress.clear();
@@ -931,6 +932,12 @@ fn run_check(
 struct Progress {
     total: usize,
     to_a_terminal: bool,
+    /// The count and the line it is written on, under one lock.
+    ///
+    /// Counted with an atomic and printed afterwards, two workers can take
+    /// their numbers in order and reach the terminal in the other one — the
+    /// counter is then seen going to 2 of 2 and back to 1 of 2.
+    done: Mutex<usize>,
 }
 
 impl Progress {
@@ -939,16 +946,21 @@ impl Progress {
         Self {
             total,
             to_a_terminal: std::io::stderr().is_terminal(),
+            done: Mutex::new(0),
         }
     }
 
-    fn show(&self, done: usize) {
+    /// One more finished, shown as it lands.
+    fn advance(&self) {
         use std::io::Write;
+        let mut done = self.done.lock().unwrap_or_else(PoisonError::into_inner);
+        *done += 1;
+
         if !self.to_a_terminal {
             return;
         }
         let mut err = std::io::stderr().lock();
-        let _ = write!(err, "{}", progress_line(done, self.total));
+        let _ = write!(err, "{}", progress_line(*done, self.total));
         let _ = err.flush();
     }
 

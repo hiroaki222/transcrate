@@ -326,8 +326,16 @@ fn encode(ffmpeg: &Path, plan: &Plan, input: &Path, output: &Path) -> Result<(),
         return Ok(());
     }
 
+    let said = String::from_utf8_lossy(&result.stderr).trim().to_owned();
     Err(ConvertError::Failed {
-        stderr: String::from_utf8_lossy(&result.stderr).trim().to_owned(),
+        // Ending the message at the colon says only that something went wrong.
+        // The status separates a file ffmpeg refused from a path that is not
+        // ffmpeg at all.
+        stderr: if said.is_empty() {
+            format!("it wrote nothing and exited with {}", result.status)
+        } else {
+            said
+        },
     })
 }
 

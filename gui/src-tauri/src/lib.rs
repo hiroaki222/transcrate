@@ -9,7 +9,7 @@ mod tools;
 mod view;
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -139,22 +139,14 @@ fn examine(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec
     let found = gather(paths, PreviousOutput::Skip);
     let inputs = &found.files;
 
-    let done = AtomicUsize::new(0);
+    let done = Mutex::new(0usize);
     let prepared = convert::prepare_all(
         &found,
         None,
         &tool(FFPROBE),
         &|_| target,
         parallel::default_concurrency(),
-        &|index, _| {
-            report(
-                app,
-                "inspect",
-                done.fetch_add(1, Ordering::Relaxed) + 1,
-                inputs.len(),
-                &inputs[index],
-            );
-        },
+        &|index, _| advance(app, "inspect", &done, inputs.len(), &inputs[index]),
     );
 
     // A folder that would not open holds tracks nobody will see otherwise.
@@ -246,20 +238,14 @@ fn encode(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<
     }
 
     let total = jobs.len();
-    let done = AtomicUsize::new(0);
+    let done = Mutex::new(0usize);
     let finished = |index: usize, _outcome: &Result<(), convert::ConvertError>| {
         if let Some(job) = jobs.get(index) {
             // How many have landed, not where this one sat in the list. With
             // several encoders running, a short track further down finishes
             // first, and its position would send the count forward and then
             // back again.
-            report(
-                app,
-                "convert",
-                done.fetch_add(1, Ordering::Relaxed) + 1,
-                total,
-                &job.input,
-            );
+            advance(app, "convert", &done, total, &job.input);
         }
     };
 
@@ -379,21 +365,13 @@ fn sweep(app: &AppHandle, path: &str, settings: &Settings) -> Result<Option<Cont
     let contents = scan::walk(&root, limits);
     let total = contents.tracks.len();
 
-    let done = AtomicUsize::new(0);
+    let done = Mutex::new(0usize);
     let verdicts = scan::judge(
         &contents.tracks,
         &tool(FFPROBE),
         &players,
         parallel::default_concurrency(),
-        &|index| {
-            report(
-                app,
-                "scan",
-                done.fetch_add(1, Ordering::Relaxed) + 1,
-                total,
-                &contents.tracks[index],
-            );
-        },
+        &|index| advance(app, "scan", &done, total, &contents.tracks[index]),
     );
 
     report(app, "scan", total, total, Path::new(""));
@@ -449,6 +427,17 @@ fn gather(paths: &[String], previous: PreviousOutput) -> files::Found {
 ///
 /// A folder of a few hundred tracks would otherwise sit silent while ffprobe
 /// works through it, which reads as a hang.
+/// One more finished, told to the window as it lands.
+///
+/// The count and the event go out under one lock. Counted with an atomic and
+/// emitted afterwards, two workers can take their numbers in order and reach
+/// the window in the other one, and the meter runs backwards.
+fn advance(app: &AppHandle, stage: &str, done: &Mutex<usize>, total: usize, current: &Path) {
+    let mut count = done.lock().unwrap_or_else(PoisonError::into_inner);
+    *count += 1;
+    report(app, stage, *count, total, current);
+}
+
 fn report(app: &AppHandle, stage: &str, done: usize, total: usize, current: &Path) {
     let _ = app.emit(
         stage,

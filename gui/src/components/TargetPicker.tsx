@@ -2,7 +2,12 @@ import { useState } from "react";
 
 import { useStrings } from "../strings";
 
-/** The three that guarantee playback. Picking any of them is safe. */
+/**
+ * Chosen by what they are for rather than by format. Two of them guarantee
+ * playback; `archive` is here because keeping a copy is a purpose people have,
+ * and it is the one with no such promise — which is what the note under it
+ * says and what the disclosure below is arranged around.
+ */
 const MAIN = ["cdj-safe", "lossless", "archive"];
 
 /** Container-only changes. Rate and depth survive, so playback may not. */

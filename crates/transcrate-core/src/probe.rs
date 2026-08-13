@@ -60,11 +60,26 @@ pub fn run(ffprobe: &Path, file: &Path) -> Result<AudioSpec, ProbeError> {
 
     if !output.status.success() {
         return Err(ProbeError::Rejected {
-            stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+            stderr: why_it_failed(&output),
         });
     }
 
     parse(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// What a failed run said, or what can be said about it when it said nothing.
+///
+/// A binary that exits non-zero without writing to stderr leaves the message
+/// ending at the colon, which tells the reader only that something went wrong.
+/// The status is the one fact left, and it is the one that separates "not a
+/// media file" from "that path is not ffprobe at all".
+fn why_it_failed(output: &std::process::Output) -> String {
+    let said = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    if !said.is_empty() {
+        return said;
+    }
+
+    format!("it wrote nothing and exited with {}", output.status)
 }
 
 /// The subset of `ffprobe -print_format json` that says what a stream is.
@@ -199,8 +214,9 @@ mod tests {
     // Every fixture below is verbatim output from
     //
     //   ffprobe -v error -select_streams a:0 \
-    //     -show_entries format=format_name:stream=codec_name,sample_rate,\
-    //   bits_per_raw_sample,bits_per_sample,bit_rate -print_format json FILE
+    //     -show_entries format=format_name:stream=codec_name,profile,\
+    //   sample_rate,bits_per_raw_sample,bits_per_sample,bit_rate \
+    //     -print_format json FILE
     //
     // captured from files ffmpeg 8.1.1 produced. They are not hand-written:
     // the awkward parts of this format are exactly the parts worth testing.
