@@ -374,8 +374,14 @@ fn run_jobs(
         return ExitCode::FAILURE;
     }
 
-    let prepared =
-        convert::prepare_all(&found.files, into, ffprobe, target_for, concurrency, &|_, _| {});
+    let prepared = convert::prepare_all(
+        &found.files,
+        into,
+        ffprobe,
+        target_for,
+        concurrency,
+        &|_, _| {},
+    );
 
     let mut planned = Vec::new();
     // A folder that would not open is a failure of the run, not a detail of it:

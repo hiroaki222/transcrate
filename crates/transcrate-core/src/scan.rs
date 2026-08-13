@@ -340,7 +340,11 @@ mod tests {
 
         assert_eq!(contents.unreadable.len(), 1);
         assert!(contents.unreadable[0].ends_with("shut"));
-        assert_eq!(contents.tracks.len(), 1, "what was reached is still counted");
+        assert_eq!(
+            contents.tracks.len(),
+            1,
+            "what was reached is still counted"
+        );
         assert!(contents.has_gaps());
     }
 
