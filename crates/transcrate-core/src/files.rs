@@ -76,8 +76,20 @@ fn sweep(directory: &Path, previous: PreviousOutput, into: &mut Vec<PathBuf>) {
     };
 
     for entry in entries.flatten() {
+        // read_dir's own file type, which does not follow symlinks — unlike
+        // Path::is_dir, which does. A folder holding a link back to one above
+        // it is an ordinary thing to have, and following it means descending
+        // the same folders forever until the stack runs out.
+        //
+        // Only the descent is guarded. A link to a *file* cannot loop, and
+        // somebody who keeps their library as links to tracks elsewhere means
+        // those tracks, so it still falls through to the audio check below.
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
         let path = entry.path();
-        if path.is_dir() {
+
+        if kind.is_dir() {
             sweep(&path, previous, into);
         } else if is_audio(&path) {
             into.push(path);
@@ -192,6 +204,43 @@ mod tests {
 
         assert_eq!(names(PreviousOutput::Skip), ["track.wav"]);
         assert_eq!(names(PreviousOutput::Include), ["track.mp3", "track.wav"]);
+    }
+
+    /// A folder holding a link back to one above it is an ordinary thing to
+    /// have, and following it walks the same folders again under a longer name
+    /// each time. It stops when the paths grow past what the system will open,
+    /// so nothing crashes — one track is simply found thirty-three times, and
+    /// converting it writes it out thirty-three times into `_transcrate`
+    /// folders scattered down the loop.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_back_up_the_tree_is_not_followed() {
+        let dir = scratch("collect-symlink-loop");
+        std::fs::create_dir_all(dir.join("Music/Sets")).expect("subdir");
+        std::fs::write(dir.join("Music/track.wav"), b"").expect("write");
+        std::os::unix::fs::symlink("../..", dir.join("Music/Sets/back")).expect("symlink");
+
+        let found = collect(&[dir.join("Music")], PreviousOutput::Skip);
+
+        assert_eq!(found.len(), 1, "found: {found:?}");
+        assert!(found[0].ends_with("track.wav"));
+    }
+
+    /// Only the descent is guarded. Somebody who keeps a library as links to
+    /// tracks held elsewhere means those tracks.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_to_a_track_is_still_a_track() {
+        let dir = scratch("collect-symlink-file");
+        std::fs::create_dir_all(dir.join("Library")).expect("subdir");
+        std::fs::write(dir.join("real.wav"), b"").expect("write");
+        std::os::unix::fs::symlink(dir.join("real.wav"), dir.join("Library/linked.wav"))
+            .expect("symlink");
+
+        let found = collect(&[dir.join("Library")], PreviousOutput::Skip);
+
+        assert_eq!(found.len(), 1, "found: {found:?}");
+        assert!(found[0].ends_with("linked.wav"));
     }
 
     /// One path named on its own is taken at its word, whatever it is called.
