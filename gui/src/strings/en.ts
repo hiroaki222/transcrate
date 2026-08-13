@@ -61,7 +61,16 @@ export const en: Strings = {
     keepComment: "Keep comments",
     keepArtwork: "Keep artwork",
     pick: "Choose tracks",
+    clear: "Clear",
     convert: (count) => `Convert ${count}`,
+  },
+
+  confirm: {
+    cancel: "Keep them",
+    clearTitle: "Take every track out of the list?",
+    clearNote: (count) =>
+      `${count} tracks leave the list. Not one file is deleted.`,
+    clearGo: "Clear the list",
   },
 
   dialog: {
@@ -83,6 +92,7 @@ export const en: Strings = {
 
   track: {
     unreadable: "Cannot be read",
+    remove: "Take out of the list",
     dither: "dithered",
     lampsNow: "NOW",
     lampsAfter: "AFTER",

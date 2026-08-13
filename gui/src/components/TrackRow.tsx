@@ -8,6 +8,9 @@ type Props = {
   index: number;
   selected: boolean;
   onSelect: () => void;
+  onRemove: () => void;
+  /** Taking a track out mid-run would change what is being converted. */
+  frozen: boolean;
 };
 
 /** A second strip is only worth reading when the verdict actually moves. */
@@ -16,7 +19,14 @@ const changesAnything = (track: Track) =>
     (after, at) => after.ok !== (track.now[at]?.ok ?? after.ok),
   );
 
-export function TrackRow({ track, index, selected, onSelect }: Props) {
+export function TrackRow({
+  track,
+  index,
+  selected,
+  onSelect,
+  onRemove,
+  frozen,
+}: Props) {
   const t = useStrings();
 
   const failing = track.now.filter((lamp) => !lamp.ok).length;
@@ -47,6 +57,24 @@ export function TrackRow({ track, index, selected, onSelect }: Props) {
           ) : (
             <span className="row-judge ng">{t.track.unreadable}</span>
           )}
+          {/*
+            Its own button rather than a second meaning for the row, and the
+            click stops here: the row opens on click, and taking a track out
+            while opening its detail would be two answers to one press.
+          */}
+          <button
+            aria-label={t.track.remove}
+            className="row-drop"
+            disabled={frozen}
+            onClick={(event) => {
+              event.stopPropagation();
+              onRemove();
+            }}
+            title={t.track.remove}
+            type="button"
+          >
+            ×
+          </button>
         </div>
 
         {track.error !== null && <div className="row-error">{track.error}</div>}

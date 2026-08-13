@@ -20,6 +20,7 @@ import {
   locale as loadLocale,
   tools as loadTools,
 } from "./api";
+import { Confirm } from "./components/Confirm";
 import { DeviceTable } from "./components/DeviceTable";
 import { DevicePicker } from "./components/DevicePicker";
 import { DrivePanel } from "./components/DrivePanel";
@@ -99,6 +100,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
   const [rows, setRows] = useState<DeviceRow[]>([]);
   const [tools, setTools] = useState<Tools | null>(null);
   const [hovering, setHovering] = useState(false);
+  const [asking, setAsking] = useState(false);
 
   const settings: ConvertOptions = useMemo(
     () => ({ profile, keepComment, artwork, devices: chosen }),
@@ -182,6 +184,33 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
     // examine changes on every settings change, so depending on it would loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, keepComment, artwork, chosen]);
+
+  /*
+    The list is rewritten to what is left rather than filtered on the way out.
+    A drop is usually one folder, and that folder is re-read whenever a setting
+    changes — which would bring back everything ever taken out of the list.
+  */
+  function remove(path: string) {
+    const left = tracks.filter((track) => track.path !== path);
+
+    setTracks(left);
+    setDropped(left.map((track) => track.path));
+    if (selected === path) setSelected(null);
+  }
+
+  /*
+    Nothing on disk is touched — this empties the list and no more. It is marked
+    as the destructive one because it is the only control here that throws away
+    work already done, and it sits beside the one that acts on all of it.
+  */
+  function clear() {
+    setAsking(false);
+    setTracks([]);
+    setDropped([]);
+    setSelected(null);
+    setOutcomes(null);
+    setFailure(null);
+  }
 
   async function choose() {
     const picked = await open({ multiple: true, title: t.dialog.pickTracks });
@@ -282,6 +311,14 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
 
             <span className="push" />
             <button
+              className="danger-btn"
+              disabled={tracks.length === 0 || busy !== null}
+              onClick={() => setAsking(true)}
+              type="button"
+            >
+              {t.toolbar.clear}
+            </button>
+            <button
               className="go-btn"
               disabled={tracks.length === 0 || busy !== null}
               onClick={run}
@@ -332,8 +369,10 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
             <div className="rows">
               {tracks.map((track, at) => (
                 <TrackRow
+                  frozen={busy !== null}
                   index={at}
                   key={track.path}
+                  onRemove={() => remove(track.path)}
                   onSelect={() =>
                     setSelected((was) => (was === track.path ? null : track.path))
                   }
@@ -359,6 +398,16 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
       {tab === "devices" && <DeviceTable rows={rows} />}
       {tab === "settings" && (
         <UtilityPanel choice={choice} onChange={onChooseLanguage} />
+      )}
+
+      {asking && (
+        <Confirm
+          confirm={t.confirm.clearGo}
+          note={t.confirm.clearNote(tracks.length)}
+          onCancel={() => setAsking(false)}
+          onConfirm={clear}
+          title={t.confirm.clearTitle}
+        />
       )}
 
       <footer className="deckbar" data-busy={busy !== null ? "" : undefined}>

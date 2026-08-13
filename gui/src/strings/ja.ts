@@ -52,7 +52,16 @@ export const ja = {
     keepComment: "コメントを残す",
     keepArtwork: "ジャケットを残す",
     pick: "曲を選ぶ",
+    clear: "すべて外す",
     convert: (count: number) => `${count}曲を変換`,
+  },
+
+  confirm: {
+    cancel: "やめる",
+    clearTitle: "リストの曲をすべて外しますか",
+    clearNote: (count: number) =>
+      `${count}曲がリストから消えます。ファイル自体は消えません。`,
+    clearGo: "すべて外す",
   },
 
   dialog: {
@@ -74,6 +83,7 @@ export const ja = {
 
   track: {
     unreadable: "読み込めません",
+    remove: "リストから外す",
     dither: "ディザ",
     lampsNow: "NOW",
     lampsAfter: "変換後",
