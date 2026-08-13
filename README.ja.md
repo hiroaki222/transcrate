@@ -156,6 +156,17 @@ transcrate check ~/Music --failing -d cdj-3000,xdj-rr
 
 ### USB を調べる
 
+パスを付けずに実行すると、接続されているメディアを一覧します。Mac のマウント先パスを覚えている人はいないためです。
+
+```sh
+transcrate usb
+```
+
+```
+DJ                   exFAT    /Volumes/DJ
+KOMORI               FAT32    /Volumes/KOMORI
+```
+
 ```sh
 transcrate usb /Volumes/DJ
 ```

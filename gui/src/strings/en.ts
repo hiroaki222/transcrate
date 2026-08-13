@@ -113,7 +113,18 @@ export const en: Strings = {
 
   drive: {
     pick: "Choose a drive",
+    picking: "Looking for drives",
+    none: "No drive found. Plug one in and look again.",
+    refresh: "Look again",
+    unreadable: "No player reads this",
     readOnly: "READ ONLY",
+    count: (n) => (n === 1 ? "1 drive" : `${n} drives`),
+    free: (n) => `${n.toFixed(1)} GB free`,
+    gb: (n) => `${n.toFixed(1)} GB`,
+    capacity: "Free space",
+    format: "Filesystem",
+    refused: "Will not read it",
+    refusedNone: "none",
     emptyTitle: "Choose a drive to see which players will read it",
     emptyNote: "Nothing is written to it, and it is never formatted.",
     nothingMounted: (path) => `Nothing is mounted at ${path}`,

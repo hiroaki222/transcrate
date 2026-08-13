@@ -106,7 +106,18 @@ export const ja = {
 
   drive: {
     pick: "USBを選ぶ",
+    picking: "接続されているUSBを探しています",
+    none: "USBが見つかりません。挿してから、もう一度お試しください。",
+    refresh: "再検索",
+    unreadable: "どの機材も読めません",
     readOnly: "READ ONLY",
+    count: (n: number) => `${n} 枚`,
+    free: (n: number) => `空き ${n.toFixed(1)} GB`,
+    gb: (n: number) => `${n.toFixed(1)} GB`,
+    capacity: "空き容量",
+    format: "ファイル形式",
+    refused: "認識できない機材",
+    refusedNone: "なし",
     emptyTitle: "USBを選ぶと、対応機材を確認できます",
     emptyNote: "USBには書き込みません。初期化もしません。",
     nothingMounted: (path: string) => `${path}には何もマウントされていません`,

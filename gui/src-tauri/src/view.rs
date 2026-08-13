@@ -155,6 +155,9 @@ fn highest_rate(player: &DeviceProfile, codec: Codec) -> Option<u32> {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Drive {
     pub(crate) mount_point: String,
+    /// The volume label — what it is called in Finder, and the only part of
+    /// this anyone recognises their own stick by.
+    pub(crate) name: String,
     /// `null` where the filesystem is one no player reads, which is worth
     /// saying rather than forcing into the nearest family.
     pub(crate) filesystem: Option<&'static str>,
@@ -204,6 +207,23 @@ pub(crate) struct FailingTrack {
     pub(crate) spec: Option<AudioSpec>,
     pub(crate) lamps: Vec<Lamp>,
     pub(crate) error: Option<String>,
+}
+
+/// One drive as the picker shows it, before anything has been read off it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct Mounted {
+    pub(crate) mount_point: String,
+    pub(crate) name: String,
+    /// `null` where no player reads it; the window falls back to `reportedAs`.
+    pub(crate) filesystem: Option<&'static str>,
+    pub(crate) reported_as: String,
+    /// How many of the chosen players read it, out of how many were chosen —
+    /// the whole verdict on a drive, at the size a list row has room for.
+    pub(crate) readable: usize,
+    pub(crate) players: usize,
+    pub(crate) total_bytes: u64,
+    pub(crate) free_bytes: u64,
 }
 
 pub(crate) const fn filesystem_name(filesystem: FileSystem) -> &'static str {

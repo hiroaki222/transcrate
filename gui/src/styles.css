@@ -581,6 +581,225 @@ select {
   gap: 14px;
 }
 
+/* ---- the drives plugged in ---- */
+/*
+  Two panes, as a player lays this out: what is plugged in down the left, and
+  everything known about the chosen one on the right. The list stays put while
+  the right side is read, so moving between two sticks is one click.
+*/
+.usb {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  min-height: 0;
+  flex: 1;
+}
+
+.usb-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+  background: var(--bar-2);
+}
+
+.usb-list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.usb-list-key {
+  font-family: var(--read);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--w-3);
+}
+
+.usb-list-count {
+  font-family: var(--read);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--w-2);
+}
+
+.usb-list-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.usb-list-none {
+  margin: 0;
+  padding: 20px 14px;
+  font-size: 12px;
+  color: var(--w-3);
+}
+
+.usb-look {
+  margin: 12px;
+}
+
+/* One stick in the list: name and format above, space and verdict below. */
+.stick {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  width: 100%;
+  padding: 12px 14px 12px 18px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line-2);
+  color: var(--w);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stick:hover {
+  background: var(--panel-2);
+}
+
+.stick[data-on] {
+  background: #0c1c2e;
+}
+
+/*
+  A bar down the leading edge rather than a colour across the row. The verdict
+  has to survive the row being selected, and a selected row already carries a
+  colour of its own.
+*/
+.stick-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  background: var(--green-solid);
+}
+
+.stick-edge.ng {
+  background: var(--red);
+}
+
+.stick-name {
+  font-family: var(--read);
+  font-size: 16px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stick .tag {
+  justify-self: end;
+  align-self: center;
+  font-family: var(--mono);
+}
+
+.stick-free {
+  font-size: 12px;
+  color: var(--w-2);
+}
+
+.stick .tally {
+  font-size: 16px;
+  justify-self: end;
+}
+
+/* ---- the drive being looked at ---- */
+.usb-detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.usb-detail-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.usb-detail-name {
+  font-family: var(--read);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.usb-detail-head .tag {
+  font-family: var(--mono);
+}
+
+.usb-detail-where {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--w-3);
+}
+
+.usb-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 14px;
+}
+
+/* The one-line answer, outlined in the colour of its own verdict. */
+.verdict {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid var(--green);
+  color: var(--green);
+}
+
+.verdict.ng {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.fact dt {
+  font-size: 13px;
+  color: var(--w-2);
+}
+
+.fact dd {
+  margin: 0;
+  font-family: var(--read);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.fact dd.ng {
+  color: var(--red);
+}
+
+.fact-of {
+  color: var(--w-3);
+}
+
 /* ---- what is on the drive ---- */
 .scan {
   display: flex;
