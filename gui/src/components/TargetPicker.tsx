@@ -13,6 +13,14 @@ const MAIN = ["cdj-safe", "lossless", "archive"];
 /** Container-only changes. Rate and depth survive, so playback may not. */
 const DIRECT = ["aiff", "wav", "flac"];
 
+/**
+ * The two that promise every chosen player will take the result.
+ *
+ * `archive` is not among them despite sitting with them above: it keeps the
+ * source's rate and depth, and makes no claim about any player.
+ */
+export const GUARANTEED = ["cdj-safe", "lossless"];
+
 type Props = {
   profile: string;
   onChange: (profile: string) => void;

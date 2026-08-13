@@ -93,12 +93,11 @@ export const en: Strings = {
     dither: "dithered",
     thin: "cannot be improved",
     lampsNow: "NOW",
+    lampsOnly: "NOW",
     lampsAfter: "AFTER",
     playsOn: (name) => `${name} — plays`,
     failsOn: (name) => `${name} — will not play`,
     reasonCount: (count) => `${count} player${count === 1 ? "" : "s"}`,
-    // What is left after the conversion, not what the file arrived as.
-    mended: (count) => `Converted, it plays on all ${count}`,
     reasonDetail: (reason, devices) => `${reason}. ${devices.join(", ")}`,
   },
 

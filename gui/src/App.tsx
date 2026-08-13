@@ -27,7 +27,7 @@ import { DrivePanel } from "./components/DrivePanel";
 import { DropZone } from "./components/DropZone";
 import { SettingsButton } from "./components/SettingsButton";
 import { UtilityPanel } from "./components/UtilityPanel";
-import { TargetPicker } from "./components/TargetPicker";
+import { GUARANTEED, TargetPicker } from "./components/TargetPicker";
 import { TrackRow } from "./components/TrackRow";
 import type { Choice } from "./strings";
 import { StringsProvider, buttons, resolve, useStrings } from "./strings";
@@ -413,6 +413,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
               {tracks.map((track, at) => (
                 <TrackRow
                   frozen={busy !== null}
+                  showAfter={!GUARANTEED.includes(profile)}
                   index={at}
                   key={track.path}
                   onRemove={() => remove(track.path)}

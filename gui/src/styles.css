@@ -621,13 +621,6 @@ select {
   border-left: 2px solid var(--red);
 }
 
-/* The same block, saying the opposite thing, so it is not the same colour. */
-.why.mended {
-  border-left-color: var(--green-solid);
-  font-size: 12.5px;
-  color: #b9f3cd;
-}
-
 .why-line {
   display: grid;
   grid-template-columns: 84px minmax(0, 1fr);

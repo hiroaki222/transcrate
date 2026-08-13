@@ -11,13 +11,16 @@ type Props = {
   onRemove: () => void;
   /** Taking a track out mid-run would change what is being converted. */
   frozen: boolean;
+  /**
+   * Whether the result still has to be judged.
+   *
+   * Under a target that promises playback it does not: the second strip would
+   * be ten green lamps under every track on the screen, and two near-identical
+   * rows of lamps are harder to read than one. Under any other target it is
+   * the answer being looked for, so it is always there.
+   */
+  showAfter: boolean;
 };
-
-/** A second strip is only worth reading when the verdict actually moves. */
-const changesAnything = (track: Track) =>
-  track.after.some(
-    (after, at) => after.ok !== (track.now[at]?.ok ?? after.ok),
-  );
 
 export function TrackRow({
   track,
@@ -26,6 +29,7 @@ export function TrackRow({
   onSelect,
   onRemove,
   frozen,
+  showAfter,
 }: Props) {
   const t = useStrings();
 
@@ -33,15 +37,12 @@ export function TrackRow({
   const state = track.error !== null || failing > 0 ? "ng" : "ok";
 
   /*
-    Reasons for what will still be wrong, not for what is wrong now. Opened,
-    an ALAC track bound for AIFF used to explain that three players do not read
-    ALAC — directly under a second strip showing all ten of them lit, because
-    the conversion on screen deals with it. The reader is left to work out that
-    the complaint is about the file they are replacing.
+    Why the row is marked, which is a fact about the file as it stands. What
+    the conversion makes of it is on the strip below under any target that does
+    not already promise an answer, and under the two that do there is nothing
+    to say.
   */
-  const settled = track.after.length > 0 ? track.after : track.now;
-  const reasons = groupReasons(t, settled);
-  const mended = failing > 0 && reasons.length === 0;
+  const reasons = groupReasons(t, track.now);
 
   return (
     <div
@@ -112,13 +113,13 @@ export function TrackRow({
           </div>
         )}
 
-        <LampStrip when={t.track.lampsNow} lamps={track.now} onBlue={selected} />
-        {changesAnything(track) && (
+        <LampStrip
+          when={showAfter ? t.track.lampsNow : t.track.lampsOnly}
+          lamps={track.now}
+          onBlue={selected}
+        />
+        {showAfter && track.after.length > 0 && (
           <LampStrip when={t.track.lampsAfter} lamps={track.after} onBlue={selected} />
-        )}
-
-        {selected && mended && (
-          <p className="why mended">{t.track.mended(track.after.length)}</p>
         )}
 
         {selected && reasons.length > 0 && (

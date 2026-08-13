@@ -85,13 +85,14 @@ export const ja = {
     // Said on the row rather than in the way. The bitrate is already
     // beside it; this is what that number means for the night.
     thin: "音質は上がりません",
-    lampsNow: "NOW",
+    lampsNow: "変換前",
+    // Alone, with no second strip beside it, "変換前" would send the reader
+    // looking for the half that is not there.
+    lampsOnly: "現在",
     lampsAfter: "変換後",
     playsOn: (name: string) => `${name} — 再生できます`,
     failsOn: (name: string) => `${name} — 再生できません`,
     reasonCount: (count: number) => `${count}機種`,
-    // What is left after the conversion, not what the file arrived as.
-    mended: (count: number) => `変換すると、${count}機種すべてで再生できます`,
     // Punctuation belongs to the language, not to whichever component happens
     // to be joining the parts up.
     reasonDetail: (reason: string, devices: string[]) =>
