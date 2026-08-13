@@ -223,9 +223,20 @@ fn encode(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<
     }
 
     let total = jobs.len();
+    let done = AtomicUsize::new(0);
     let finished = |index: usize, _outcome: &Result<(), convert::ConvertError>| {
         if let Some(job) = jobs.get(index) {
-            report(app, "convert", index + 1, total, &job.input);
+            // How many have landed, not where this one sat in the list. With
+            // several encoders running, a short track further down finishes
+            // first, and its position would send the count forward and then
+            // back again.
+            report(
+                app,
+                "convert",
+                done.fetch_add(1, Ordering::Relaxed) + 1,
+                total,
+                &job.input,
+            );
         }
     };
 
