@@ -675,11 +675,31 @@ select {
   color: var(--orange);
 }
 
-.scan-track {
-  flex: 1;
-  display: flex;
+/*
+  Name above its lamps, both hard left — the same shape the conversion screen
+  uses. Pushing the lamps to the far edge instead leaves a gap wide enough that,
+  down a list of twenty, no row reads as one thing.
+*/
+/* Qualified, or `.finding-list li` outranks it and keeps centring the column. */
+.finding-list li.finding-track {
   flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding-top: 3px;
+}
+
+.finding-track + .finding-track {
+  border-top: 1px solid var(--line-2);
+  margin-top: 3px;
+  padding-top: 6px;
+}
+
+.scan-track {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   min-width: 0;
+  max-width: 100%;
 }
 
 .scan-name {

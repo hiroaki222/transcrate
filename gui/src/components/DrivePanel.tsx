@@ -254,7 +254,7 @@ function ScanReport({ contents }: { contents: Contents | null }) {
           note={t.scan.failingNote}
         >
           {contents.failing.slice(0, NAMED_AT_MOST).map((track) => (
-            <li key={track.path}>
+            <li className="finding-track" key={track.path}>
               <span className="scan-track">
                 <span className="scan-name">{track.name}</span>
                 <span className="scan-where">

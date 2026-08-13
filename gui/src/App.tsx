@@ -348,27 +348,35 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
 
       <footer className="deckbar" data-busy={busy !== null ? "" : undefined}>
         {busy === null ? (
-          <>
-            <span className="cell">
-              <span className="cell-key">TRACKS</span>
-              <span className="cell-val">{tracks.length}</span>
-            </span>
-            <span className="cell">
-              <span className="cell-key">REJECTED</span>
-              <span className={failing > 0 ? "cell-val ng" : "cell-val"}>
-                {failing}
-              </span>
-            </span>
-            {outcomes !== null && (
+          /*
+            These count what has been dropped for conversion. The drive screen
+            keeps its own tally under the same two words, and showing both at
+            once puts one TRACKS directly below another holding a different
+            number.
+          */
+          tab !== "drive" && (
+            <>
               <span className="cell">
-                <span className="cell-key">CONVERTED</span>
-                <span className="cell-val hot">
-                  {converted}
-                  <small> / {outcomes.length}</small>
+                <span className="cell-key">TRACKS</span>
+                <span className="cell-val">{tracks.length}</span>
+              </span>
+              <span className="cell">
+                <span className="cell-key">REJECTED</span>
+                <span className={failing > 0 ? "cell-val ng" : "cell-val"}>
+                  {failing}
                 </span>
               </span>
-            )}
-          </>
+              {outcomes !== null && (
+                <span className="cell">
+                  <span className="cell-key">CONVERTED</span>
+                  <span className="cell-val hot">
+                    {converted}
+                    <small> / {outcomes.length}</small>
+                  </span>
+                </span>
+              )}
+            </>
+          )
         ) : (
           <>
             <span className="cell">
