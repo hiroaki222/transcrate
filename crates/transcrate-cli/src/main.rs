@@ -540,6 +540,17 @@ fn report_contents(
     progress.clear();
 
     let failing: Vec<_> = verdicts.iter().filter(|v| !v.plays()).collect();
+
+    // Said either way round. A drive with one bad track is mostly good news, and
+    // reporting only the failure leaves it to be worked out by subtraction.
+    if tracks > 0 {
+        println!(
+            "\n  {} of {tracks} {} will play on every player named",
+            tracks - failing.len(),
+            plural(tracks, "track"),
+        );
+    }
+
     if failing.is_empty() {
         return clean;
     }

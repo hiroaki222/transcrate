@@ -127,6 +127,8 @@ export const en: Strings = {
     noTracks: "No tracks on this drive.",
     allPlay: (count) =>
       `All ${count.toLocaleString()} tracks play on the chosen players.`,
+    someFail: (plays, total) =>
+      `${plays.toLocaleString()} of ${total.toLocaleString()} tracks play on the chosen players.`,
 
     // The drive mounts and the files are there — the browser simply stops.
     // Saying only "too deep" leaves it sounding cosmetic.

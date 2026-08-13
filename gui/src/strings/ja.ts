@@ -131,6 +131,8 @@ export const ja = {
     noTracks: "曲が見つかりませんでした。",
     allPlay: (count: number) =>
       `${count.toLocaleString()}曲すべてが、選んだ機材で再生できます。`,
+    someFail: (plays: number, total: number) =>
+      `${total.toLocaleString()}曲のうち${plays.toLocaleString()}曲は、選んだ機材で再生できます。`,
 
     // The drive mounts and the files are there — the browser simply stops.
     // Saying only "too deep" leaves it sounding cosmetic.

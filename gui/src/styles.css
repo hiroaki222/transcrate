@@ -797,6 +797,10 @@ table.grid td.yes {
   color: var(--red);
 }
 
+.cell-val.ok {
+  color: var(--green);
+}
+
 .cell-val small {
   font-size: 11px;
   color: var(--w-2);

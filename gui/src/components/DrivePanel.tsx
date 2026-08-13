@@ -149,10 +149,7 @@ function ScanReport({ contents }: { contents: Contents | null }) {
 
   if (contents === null) return null;
 
-  const clean =
-    contents.unreachable.length === 0 &&
-    contents.crowded.length === 0 &&
-    contents.failing.length === 0;
+  const plays = contents.tracks - contents.failing.length;
 
   return (
     <section className="scan">
@@ -162,6 +159,25 @@ function ScanReport({ contents }: { contents: Contents | null }) {
         <span className="cell">
           <span className="cell-key">TRACKS</span>
           <span className="cell-val">{contents.tracks.toLocaleString()}</span>
+        </span>
+        {/*
+          Shown next to the rejected count rather than only when nothing is
+          wrong. A drive with one bad track is mostly good news, and reporting
+          only the failure leaves somebody to work that out by subtraction.
+        */}
+        <span className="cell">
+          <span className="cell-key">PLAYS</span>
+          <span className={plays > 0 ? "cell-val ok" : "cell-val"}>
+            {plays.toLocaleString()}
+          </span>
+        </span>
+        <span className="cell">
+          <span className="cell-key">REJECTED</span>
+          <span
+            className={contents.failing.length > 0 ? "cell-val ng" : "cell-val"}
+          >
+            {contents.failing.length.toLocaleString()}
+          </span>
         </span>
         <span className="cell">
           <span className="cell-key">FOLDERS</span>
@@ -178,22 +194,21 @@ function ScanReport({ contents }: { contents: Contents | null }) {
             <small> / {contents.depthLimit}</small>
           </span>
         </span>
-        <span className="cell">
-          <span className="cell-key">REJECTED</span>
-          <span
-            className={
-              contents.failing.length > 0 ? "cell-val ng" : "cell-val"
-            }
-          >
-            {contents.failing.length.toLocaleString()}
-          </span>
-        </span>
       </div>
 
       {contents.tracks === 0 ? (
         <p className="note">{t.scan.noTracks}</p>
       ) : (
-        clean && <p className="scan-clear">{t.scan.allPlay(contents.tracks)}</p>
+        /*
+          Keyed on the tracks alone, not on `clean`: a folder nested too deep
+          says nothing about whether the tracks themselves play, and "2 of 2
+          tracks play" is a strange way to say all of them do.
+        */
+        <p className={plays > 0 ? "scan-clear" : "note"}>
+          {contents.failing.length === 0
+            ? t.scan.allPlay(contents.tracks)
+            : t.scan.someFail(plays, contents.tracks)}
+        </p>
       )}
 
       {contents.otherFiles > 0 && (
