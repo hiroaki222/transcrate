@@ -110,14 +110,18 @@ export const ja = {
     encode: "変換",
   },
 
+  // The subject of every one of these is the player, named alongside them.
+  // `${codec}は` made the codec the subject instead — "FLAC does not support
+  // 96,000 Hz" rather than "it does not support FLAC at 96,000 Hz" — which
+  // blames the format for a limit belonging to the hardware.
   issue: {
     codec: (codec: string) => `${codec}に対応していません`,
     sampleRate: (codec: string, hz: string) =>
-      `${codec}は${hz} Hzに対応していません`,
+      `${codec}の${hz} Hzに対応していません`,
     bitDepth: (codec: string, bits: number) =>
-      `${codec}は${bits} bitに対応していません`,
+      `${codec}の${bits} bitに対応していません`,
     bitrate: (codec: string, kbps: number, low: number, high: number) =>
-      `${codec}は${kbps} kbpsに対応していません（対応範囲：${low}〜${high} kbps）`,
+      `${codec}の${kbps} kbpsに対応していません（対応範囲：${low}〜${high} kbps）`,
   },
 
   drive: {
