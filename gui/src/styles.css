@@ -1451,6 +1451,58 @@ table.grid td.yes {
   font-weight: 700;
 }
 
+/*
+  A run where something was refused is not a run that went well, and the green
+  box read as one — the count of failures sat inside it. The successes are real,
+  so the box stays; what it stops doing is congratulating.
+*/
+.done[data-partial] {
+  border-color: var(--red);
+  background: rgba(255, 59, 48, 0.1);
+}
+
+.done[data-partial] .done-mark {
+  background: var(--red);
+  box-shadow: 0 0 12px rgba(255, 59, 48, 0.7);
+}
+
+/* Named under the banner: a count alone leaves the file to be found by hand. */
+.refused {
+  list-style: none;
+  margin: 0 12px;
+  padding: 8px 14px;
+  border: 1px solid var(--line-2);
+  border-top: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.refused li {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.refused-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.refused-why {
+  font-size: 11.5px;
+  color: var(--w-2);
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* ---- intake ---- */
 .drop {
   flex: 1;

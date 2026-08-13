@@ -249,6 +249,9 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
   ).length;
 
   const converted = outcomes?.filter((outcome) => outcome.error === null).length ?? 0;
+  // Named, not counted. "1 could not be converted" out of a list of forty
+  // leaves the one file that needs attention to be found by hand.
+  const refused = outcomes?.filter((outcome) => outcome.error !== null) ?? [];
 
   const landed =
     outcomes?.find((outcome) => outcome.error === null)?.outputPath ?? null;
@@ -331,13 +334,13 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
           {failure !== null && <div className="failure">{failure}</div>}
 
           {outcomes !== null && (
-            <div className="done">
+            <div className="done" data-partial={refused.length > 0 ? "" : undefined}>
               <span className="done-mark" />
               <span className="done-text">
                 {t.done.converted(converted)}
-                {outcomes.length > converted && (
+                {refused.length > 0 && (
                   <span className="done-failed">
-                    {t.done.failed(outcomes.length - converted)}
+                    {t.done.failed(refused.length)}
                   </span>
                 )}
               </span>
@@ -359,6 +362,17 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
                 {t.done.dismiss}
               </button>
             </div>
+          )}
+
+          {refused.length > 0 && (
+            <ul className="refused">
+              {refused.map((outcome) => (
+                <li key={outcome.path}>
+                  <span className="refused-name">{outcome.name}</span>
+                  <span className="refused-why">{outcome.error}</span>
+                </li>
+              ))}
+            </ul>
           )}
 
           <TargetPicker onChange={setProfile} profile={profile} />
