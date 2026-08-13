@@ -92,6 +92,7 @@ export const en: Strings = {
     remove: "Take out of the list",
     dither: "dithered",
     thin: "Low-quality source",
+    thinNote: "Converting cannot make it better than it arrived.",
     lampsNow: "NOW",
     lampsOnly: "NOW",
     lampsAfter: "AFTER",

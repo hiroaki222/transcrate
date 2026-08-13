@@ -79,18 +79,23 @@ export function TrackRow({
             here, beside the bitrate that explains it, rather than in a dialog
             in front of the list.
           */}
+          {/*
+            Its own panel rather than the browser's tooltip, which waits about
+            a second before it appears — long enough that a mark nobody can
+            read is all most people ever see of this.
+          */}
           {track.thin && (
-            <span
-              aria-label={t.track.thin}
-              className="row-thin"
-              role="img"
-              title={t.track.thin}
-            >
+            <span aria-label={t.track.thin} className="row-thin" role="img">
               <svg viewBox="0 0 16 16" aria-hidden="true">
                 <path d="M8 2.2 15 14.2H1z" />
                 <path d="M8 6.4v3.4" />
                 <circle cx="8" cy="11.9" r="0.85" />
               </svg>
+
+              <span aria-hidden="true" className="row-thin-say">
+                <b>{t.track.thin}</b>
+                {t.track.thinNote}
+              </span>
             </span>
           )}
 

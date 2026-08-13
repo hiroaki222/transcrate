@@ -85,6 +85,7 @@ export const ja = {
     // Read on hover, and by anything reading the row aloud. The bitrate is
     // already beside it; this says what that number means.
     thin: "音質が悪いファイルです",
+    thinNote: "変換しても、元より良くはなりません。",
     lampsNow: "変換前",
     // Alone, with no second strip beside it, "変換前" would send the reader
     // looking for the half that is not there.

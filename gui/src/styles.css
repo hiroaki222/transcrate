@@ -535,10 +535,45 @@ select {
   second verdict. Yellow rather than red: the track plays.
 */
 .row-thin {
+  position: relative;
   display: flex;
   align-items: center;
   color: var(--yellow);
   flex: none;
+}
+
+/*
+  No delay and no transition. The browser's own tooltip waits about a second,
+  which on a mark this small means most people never learn what it is for.
+*/
+.row-thin-say {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -8px;
+  z-index: 2;
+  display: none;
+  width: max-content;
+  max-width: 280px;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--yellow);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.65);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--w-2);
+  white-space: normal;
+  text-align: left;
+  word-break: auto-phrase;
+}
+
+.row-thin-say b {
+  display: block;
+  font-size: 12.5px;
+  color: var(--yellow);
+}
+
+.row-thin:hover .row-thin-say {
+  display: block;
 }
 
 .row-thin svg {
