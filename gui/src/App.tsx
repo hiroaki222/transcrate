@@ -83,7 +83,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
   const [selected, setSelected] = useState<string | null>(null);
   const [outcomes, setOutcomes] = useState<Outcome[] | null>(null);
 
-  const [busy, setBusy] = useState<"inspect" | "convert" | null>(null);
+  const [busy, setBusy] = useState<"inspect" | "convert" | "scan" | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -117,11 +117,19 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
     const listeners = [
       listen<Progress>("inspect", (event) => setProgress(event.payload)),
       listen<Progress>("convert", (event) => setProgress(event.payload)),
+      listen<Progress>("scan", (event) => setProgress(event.payload)),
     ];
 
     return () => {
       void Promise.all(listeners).then((offs) => offs.forEach((off) => off()));
     };
+  }, []);
+
+  // The drive panel reads through the same counter the conversion screen does,
+  // so the window never shows two different notions of "working".
+  const onScanning = useCallback((running: boolean) => {
+    setBusy(running ? "scan" : null);
+    if (!running) setProgress(null);
   }, []);
 
   const examine = useCallback(
@@ -328,6 +336,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
         <DrivePanel
           chosen={chosen}
           onChooseDevices={setChosen}
+          onScanning={onScanning}
           rows={rows}
           settings={settings}
         />
@@ -339,32 +348,40 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
 
       <footer className="deckbar" data-busy={busy !== null ? "" : undefined}>
         {busy === null ? (
-          <>
-            <span className="cell">
-              <span className="cell-key">TRACKS</span>
-              <span className="cell-val">{tracks.length}</span>
-            </span>
-            <span className="cell">
-              <span className="cell-key">REJECTED</span>
-              <span className={failing > 0 ? "cell-val ng" : "cell-val"}>
-                {failing}
-              </span>
-            </span>
-            {outcomes !== null && (
+          /*
+            These count what has been dropped for conversion. The drive screen
+            keeps its own tally under the same two words, and showing both at
+            once puts one TRACKS directly below another holding a different
+            number.
+          */
+          tab !== "drive" && (
+            <>
               <span className="cell">
-                <span className="cell-key">CONVERTED</span>
-                <span className="cell-val hot">
-                  {converted}
-                  <small> / {outcomes.length}</small>
+                <span className="cell-key">TRACKS</span>
+                <span className="cell-val">{tracks.length}</span>
+              </span>
+              <span className="cell">
+                <span className="cell-key">REJECTED</span>
+                <span className={failing > 0 ? "cell-val ng" : "cell-val"}>
+                  {failing}
                 </span>
               </span>
-            )}
-          </>
+              {outcomes !== null && (
+                <span className="cell">
+                  <span className="cell-key">CONVERTED</span>
+                  <span className="cell-val hot">
+                    {converted}
+                    <small> / {outcomes.length}</small>
+                  </span>
+                </span>
+              )}
+            </>
+          )
         ) : (
           <>
             <span className="cell">
               <span className="cell-key">
-                {busy === "inspect" ? "READING" : "CONVERTING"}
+                {busy === "convert" ? "CONVERTING" : "READING"}
               </span>
               <span className="cell-val">
                 {progress?.done ?? 0}

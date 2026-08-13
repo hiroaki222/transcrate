@@ -11,7 +11,7 @@ use transcrate_core::plan::{Action, Artwork, MetadataPolicy, Target};
 use transcrate_core::usb;
 use transcrate_core::{
     AudioSpec, Codec, DEVICES, DeviceProfile, FileSystem, Issue, Support, by_id, check, convert,
-    probe,
+    parallel, probe, scan,
 };
 
 /// Shown under the top-level help. Someone reading `-h` for the first time
@@ -137,6 +137,14 @@ Examples:
             value_parser = PossibleValuesParser::new(DEVICES.iter().map(|player| player.id)),
         )]
         devices: Vec<String>,
+
+        /// Report the filesystem only, without reading the tracks.
+        #[arg(long)]
+        no_tracks: bool,
+
+        /// The ffprobe binary to use.
+        #[arg(long, default_value = "ffprobe", value_name = "PATH", value_hint = ValueHint::FilePath)]
+        ffprobe: PathBuf,
     },
 
     /// Print a shell completion script.
@@ -248,7 +256,12 @@ fn main() -> ExitCode {
         } => run_check(&files, &devices, failing, &ffprobe),
         Command::Convert(args) => run_convert(&args),
         Command::Retag(args) => run_retag(&args),
-        Command::Usb { path, devices } => run_usb(&path, &devices),
+        Command::Usb {
+            path,
+            devices,
+            no_tracks,
+            ffprobe,
+        } => run_usb(&path, &devices, (!no_tracks).then_some(ffprobe.as_path())),
         Command::Completions { shell } => {
             write_completions(shell, &mut std::io::stdout());
             ExitCode::SUCCESS
@@ -329,9 +342,10 @@ fn run_jobs(
     into: Option<&Path>,
     concurrency: Option<usize>,
     tools: (&Path, &Path),
-    target_for: &dyn Fn(&AudioSpec) -> Target,
+    target_for: &(dyn Fn(&AudioSpec) -> Target + Sync),
 ) -> ExitCode {
     let (ffmpeg, ffprobe) = tools;
+    let concurrency = concurrency.unwrap_or_else(parallel::default_concurrency);
 
     // Plan everything before encoding anything, so a file that cannot be read
     // is named straight away rather than after minutes of work on the rest.
@@ -341,11 +355,14 @@ fn run_jobs(
         return ExitCode::FAILURE;
     }
 
+    let prepared =
+        convert::prepare_all(&inputs, into, ffprobe, target_for, concurrency, &|_, _| {});
+
     let mut planned = Vec::new();
     let mut all_done = true;
 
-    for input in &inputs {
-        match convert::prepare(input, into, ffprobe, target_for) {
+    for outcome in prepared {
+        match outcome {
             Ok(job) => planned.push(job),
             Err(error) => {
                 eprintln!("{error}");
@@ -357,15 +374,10 @@ fn run_jobs(
     let total = planned.len();
     let done = AtomicUsize::new(0);
 
-    let results = convert::run_all(
-        ffmpeg,
-        &planned,
-        concurrency.unwrap_or_else(convert::default_concurrency),
-        &|index, result| {
-            let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
-            report_one(finished, total, &planned[index], result);
-        },
-    );
+    let results = convert::run_all(ffmpeg, &planned, concurrency, &|index, result| {
+        let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
+        report_one(finished, total, &planned[index], result);
+    });
 
     all_done &= results.iter().all(Result::is_ok);
 
@@ -376,12 +388,13 @@ fn run_jobs(
     }
 }
 
-/// Report which players will read a drive.
+/// Report which players will read a drive, and what is on it.
 ///
 /// Exits non-zero when any of the named players will not, so this can gate a
 /// script — and because a drive half the booth cannot read is a problem worth
-/// a failing exit code.
-fn run_usb(path: &Path, device_ids: &[String]) -> ExitCode {
+/// a failing exit code. Passing `ffprobe` reads the tracks too, which is the
+/// slow part and the reason it can be turned off.
+fn run_usb(path: &Path, device_ids: &[String], ffprobe: Option<&Path>) -> ExitCode {
     let players = match resolve_players(device_ids) {
         Ok(players) => players,
         Err(message) => {
@@ -438,10 +451,186 @@ fn run_usb(path: &Path, device_ids: &[String]) -> ExitCode {
         println!("  {:<14} {verdict}", player.display_name);
     }
 
-    if refused == 0 {
+    let clean = report_contents(&drive.mount_point, &players, ffprobe);
+
+    if refused == 0 && clean {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// How many offending paths to name before summarising the rest.
+///
+/// A stick that is wrong is usually wrong in one place repeated many times, so
+/// the first few name the problem and the rest would only bury it.
+const NAMED_AT_MOST: usize = 10;
+
+/// Report what is on the drive, returning whether every player would take it.
+///
+/// The walk itself opens nothing and comes back at once. Reading the tracks is
+/// one ffprobe per file, so it runs on the pool and shows a count while it does.
+fn report_contents(
+    root: &Path,
+    players: &[&'static DeviceProfile],
+    ffprobe: Option<&Path>,
+) -> bool {
+    let Some(limits) = scan::Limits::strictest_of(players) else {
+        return true;
+    };
+
+    let contents = scan::walk(root, limits);
+    let tracks = contents.tracks.len();
+
+    println!(
+        "\n  {tracks} {}, {} {}, {} deep",
+        plural(tracks, "track"),
+        contents.folders,
+        plural(contents.folders, "folder"),
+        contents.deepest,
+    );
+
+    if contents.other_files > 0 {
+        println!(
+            "  {} {} no player will list",
+            contents.other_files,
+            plural(contents.other_files, "other file"),
+        );
+    }
+
+    let mut clean = true;
+
+    if !contents.unreachable.is_empty() {
+        clean = false;
+        println!(
+            "\n  past {} folders deep, so the browser never reaches it",
+            limits.folder_depth
+        );
+        list(
+            contents
+                .unreachable
+                .iter()
+                .map(|folder| format!("    {}", relative_to(root, folder))),
+        );
+    }
+
+    for crowded in &contents.crowded {
+        clean = false;
+        println!(
+            "\n  {} holds {} entries, and the browser lists {}",
+            relative_to(root, &crowded.folder),
+            crowded.entries,
+            limits.entries_per_folder.unwrap_or_default(),
+        );
+    }
+
+    let Some(ffprobe) = ffprobe else {
+        return clean;
+    };
+
+    let progress = Progress::new(tracks);
+    let done = AtomicUsize::new(0);
+    let verdicts = scan::judge(
+        &contents.tracks,
+        ffprobe,
+        players,
+        parallel::default_concurrency(),
+        &|_| progress.show(done.fetch_add(1, Ordering::Relaxed) + 1),
+    );
+    progress.clear();
+
+    let failing: Vec<_> = verdicts.iter().filter(|v| !v.plays()).collect();
+
+    // Said either way round. A drive with one bad track is mostly good news, and
+    // reporting only the failure leaves it to be worked out by subtraction.
+    if tracks > 0 {
+        println!(
+            "\n  {} of {tracks} {} will play on every player named",
+            tracks - failing.len(),
+            plural(tracks, "track"),
+        );
+    }
+
+    if failing.is_empty() {
+        return clean;
+    }
+
+    println!(
+        "\n  {} {} at least one player will not take",
+        failing.len(),
+        plural(failing.len(), "track"),
+    );
+    list(failing.iter().map(|verdict| {
+        let why = match &verdict.error {
+            Some(error) => first_line(error),
+            None => verdict
+                .refused_by
+                .iter()
+                .map(|refusal| {
+                    let reasons: Vec<_> =
+                        refusal.issues.iter().copied().map(describe_issue).collect();
+                    format!("{}: {}", refusal.player.display_name, reasons.join("; "))
+                })
+                .collect::<Vec<_>>()
+                .join(", "),
+        };
+        format!("    {:<38} {why}", relative_to(root, &verdict.path))
+    }));
+
+    false
+}
+
+/// Print at most [`NAMED_AT_MOST`] lines, then say how many were left out.
+///
+/// Silently stopping would read as "that is all of them", which is the one thing
+/// a report of what is wrong must never imply.
+fn list(lines: impl ExactSizeIterator<Item = String>) {
+    let total = lines.len();
+
+    for line in lines.take(NAMED_AT_MOST) {
+        println!("{line}");
+    }
+
+    if let Some(rest) = total.checked_sub(NAMED_AT_MOST).filter(|rest| *rest > 0) {
+        println!("    and {rest} more");
+    }
+}
+
+/// One track to a line, so a column of them stays a column.
+///
+/// ffprobe's complaint runs to several lines and carries the address it was
+/// loaded at, none of which says anything about the track. The first line does.
+fn first_line(message: &str) -> String {
+    let line = message.lines().next().unwrap_or(message).trim();
+
+    // "could not read the file: [mp3 @ 0x…] Failed to find…" — ffprobe naming the
+    // decoder it loaded and the address it landed at, between two useful parts.
+    // Matched on the address, so a bracket that means something else survives.
+    let tagged = line
+        .find(": [")
+        .and_then(|start| line[start..].find("] ").map(|end| (start, start + end)))
+        .filter(|(start, end)| line[*start..*end].contains(" @ 0x"));
+
+    match tagged {
+        Some((start, end)) => format!("{}: {}", &line[..start], &line[end + 2..]),
+        None => line.to_owned(),
+    }
+}
+
+/// Paths shown as they sit on the drive, since the mount point is on the line
+/// above and repeating it on every row buries the part that differs.
+fn relative_to(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
+fn plural(count: usize, noun: &str) -> String {
+    if count == 1 {
+        noun.to_owned()
+    } else {
+        format!("{noun}s")
     }
 }
 
@@ -582,16 +771,24 @@ fn run_check(
         return ExitCode::FAILURE;
     }
 
+    let progress = Progress::new(inputs.len());
+    let done = AtomicUsize::new(0);
+
+    // Read every file first, then report. Probing is one process per file and
+    // parallelises; the report has to stay in the order the files were given.
+    let specs = parallel::map(
+        &inputs,
+        parallel::default_concurrency(),
+        &|_, file| probe::run(ffprobe, file),
+        &|_, _| progress.show(done.fetch_add(1, Ordering::Relaxed) + 1),
+    );
+
+    progress.clear();
+
     let mut all_clear = true;
     let mut rejected_count = 0usize;
-    let progress = Progress::new(inputs.len());
 
-    for (index, file) in inputs.iter().enumerate() {
-        progress.show(index + 1);
-        let outcome = probe::run(ffprobe, file);
-        // Anything printed has to appear above the counter, not through it.
-        progress.clear();
-
+    for (file, outcome) in inputs.iter().zip(specs) {
         match outcome {
             Ok(spec) => {
                 let failing = rejected_anywhere(&spec, &players);
@@ -1043,5 +1240,27 @@ mod tests {
             requested_bits: 32,
         });
         assert!(depth.contains("32"), "got: {depth}");
+    }
+
+    /// One drive can hold thousands of unreadable files, and ffprobe answers
+    /// each with several lines and the address it happened to load at. Left
+    /// alone that turns a column of tracks into an unreadable wall.
+    #[test]
+    fn a_failure_reads_as_one_line_about_the_track() {
+        let raw = "ffprobe could not read the file: [mp3 @ 0xaacc38000] Failed to \
+                   find two consecutive MPEG audio frames.\n\
+                   /Volumes/DJ/track.mp3: Invalid data found when processing input";
+
+        assert_eq!(
+            first_line(raw),
+            "ffprobe could not read the file: Failed to find two consecutive MPEG audio frames."
+        );
+    }
+
+    /// Most failures carry no decoder tag, and must come through untouched.
+    #[test]
+    fn a_message_without_ffprobes_noise_is_left_alone() {
+        assert_eq!(first_line("no such file"), "no such file");
+        assert_eq!(first_line("gave up: [1] of 2"), "gave up: [1] of 2");
     }
 }

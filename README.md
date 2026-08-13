@@ -75,8 +75,12 @@ Three screens:
 
   ![Each track with its verdict now and after converting](docs/images/convert.png)
 
-- **USB CHECK** — point it at a drive and see which players will read it.
-  Read-only, and there is no format button.
+- **USB CHECK** — point it at a drive. It reports the filesystem, then reads
+  every track on it and names the ones a player will refuse. It also measures
+  the tree: the players stop at eight folder levels and list ten thousand
+  entries per folder, and past either of those a drive mounts, the tracks are
+  there, and the browser shows nothing. Read-only, and there is no format
+  button.
 
   ![A drive checked against every player](docs/images/usb-check.png)
 
@@ -212,11 +216,24 @@ transcrate usb /Volumes/DJ
   CDJ-2000NXS2   does not read exFAT
   XDJ-XZ         sources disagree about exFAT
   XDJ-RR         does not read exFAT
+
+  2 tracks, 1 folder, 2 deep
+
+  1 of 2 tracks will play on every player named
+
+  1 track at least one player will not take
+    Set/02 Peak Time.m4a    XDJ-XZ: ALAC is not supported, XDJ-RX3: ALAC is …
 ```
 
 Formatting a stick exFAT is the easy default and it locks out two players that
 are still in plenty of booths. `-d` narrows it to the gear you are actually
 plugging into, and it exits non-zero if any of those will not read the drive.
+
+Below the filesystem it reads every track on the drive, which is one ffprobe
+each and the slow half — `--no-tracks` stops after the filesystem. It also
+measures the tree, because the players stop at eight folder levels and list ten
+thousand entries per folder. Past either of those the drive mounts, the tracks
+are there, and the browser shows nothing.
 
 **Read-only.** Nothing here writes to a drive, formats one or moves a file. A
 tool you run on your own set should not be able to damage it.

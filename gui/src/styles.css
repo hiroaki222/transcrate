@@ -581,6 +581,134 @@ select {
   gap: 14px;
 }
 
+/* ---- what is on the drive ---- */
+.scan {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.scan-head {
+  font-family: var(--read);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--w-3);
+}
+
+.scan-counts {
+  display: flex;
+  gap: 26px;
+  flex-wrap: wrap;
+}
+
+.scan-clear {
+  margin: 0;
+  font-size: 13px;
+  color: var(--green);
+}
+
+.finding {
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.42);
+  border-left: 2px solid var(--red);
+}
+
+.finding-title {
+  font-family: var(--read);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--red);
+}
+
+.finding-note {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--w-2);
+}
+
+.finding-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.finding-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.finding-more {
+  font-size: 11.5px;
+  color: var(--w-3);
+}
+
+/* Paths are read for where they differ, which is the end, not the start. */
+.scan-path,
+.scan-where {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--w-3);
+  direction: rtl;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scan-path {
+  flex: 1;
+  color: var(--w-2);
+}
+
+.scan-count {
+  font-family: var(--read);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--orange);
+}
+
+/*
+  Name above its lamps, both hard left — the same shape the conversion screen
+  uses. Pushing the lamps to the far edge instead leaves a gap wide enough that,
+  down a list of twenty, no row reads as one thing.
+*/
+/* Qualified, or `.finding-list li` outranks it and keeps centring the column. */
+.finding-list li.finding-track {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding-top: 3px;
+}
+
+.finding-track + .finding-track {
+  border-top: 1px solid var(--line-2);
+  margin-top: 3px;
+  padding-top: 6px;
+}
+
+.scan-track {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.scan-name {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- compatibility table ---- */
 .grid-wrap {
   overflow-x: auto;
@@ -687,6 +815,10 @@ table.grid td.yes {
 
 .cell-val.ng {
   color: var(--red);
+}
+
+.cell-val.ok {
+  color: var(--green);
 }
 
 .cell-val small {

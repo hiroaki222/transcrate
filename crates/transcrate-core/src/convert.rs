@@ -1,14 +1,11 @@
 //! Carrying out a plan.
 
-use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::thread;
 
 use crate::compat::AudioSpec;
 use crate::files::{self, PathError};
+use crate::parallel;
 use crate::plan::{Action, Plan, Target, encode_args};
 use crate::probe::{self, ProbeError};
 
@@ -116,13 +113,29 @@ pub struct Job {
     pub output: PathBuf,
 }
 
-/// How many encodes to run at once by default: one per available core.
+/// Plan every file, at most `concurrency` at a time.
 ///
-/// Each ffmpeg is pinned to a single thread, because audio codecs barely
-/// parallelise — throughput comes from running many encodes at once rather than
-/// from making one of them faster.
-pub fn default_concurrency() -> usize {
-    thread::available_parallelism().map_or(1, NonZeroUsize::get)
+/// Planning is one ffprobe process per file, so a folder of several hundred
+/// tracks spends real time here before a single note is encoded. Results stay in
+/// the order the files were given, because a failure has to name its file.
+///
+/// # Panics
+///
+/// Panics if a worker thread panics.
+pub fn prepare_all(
+    files: &[PathBuf],
+    into: Option<&Path>,
+    ffprobe: &Path,
+    target_for: &(dyn Fn(&AudioSpec) -> Target + Sync),
+    concurrency: usize,
+    on_finished: &(dyn Fn(usize, &Result<Job, PrepareError>) + Sync),
+) -> Vec<Result<Job, PrepareError>> {
+    parallel::map(
+        files,
+        concurrency,
+        &|_, file| prepare(file, into, ffprobe, target_for),
+        on_finished,
+    )
 }
 
 /// Run every job, at most `concurrency` at a time.
@@ -145,37 +158,12 @@ pub fn run_all(
     concurrency: usize,
     on_finished: &(dyn Fn(usize, &Result<(), ConvertError>) + Sync),
 ) -> Vec<Result<(), ConvertError>> {
-    let next = AtomicUsize::new(0);
-    let results: Mutex<Vec<Option<Result<(), ConvertError>>>> =
-        Mutex::new((0..jobs.len()).map(|_| None).collect());
-
-    // Workers beyond the job count would start only to find nothing left.
-    let workers = concurrency.clamp(1, jobs.len().max(1));
-
-    thread::scope(|scope| {
-        for _ in 0..workers {
-            scope.spawn(|| {
-                loop {
-                    let index = next.fetch_add(1, Ordering::Relaxed);
-                    let Some(job) = jobs.get(index) else { break };
-
-                    let outcome = run(ffmpeg, &job.plan, &job.input, &job.output);
-                    on_finished(index, &outcome);
-
-                    // Held just long enough to drop the result into its slot,
-                    // never across an encode.
-                    results.lock().expect("results lock")[index] = Some(outcome);
-                }
-            });
-        }
-    });
-
-    results
-        .into_inner()
-        .expect("results lock")
-        .into_iter()
-        .map(|slot| slot.expect("every index was filled by a worker"))
-        .collect()
+    parallel::map(
+        jobs,
+        concurrency,
+        &|_, job| run(ffmpeg, &job.plan, &job.input, &job.output),
+        on_finished,
+    )
 }
 
 fn encode(ffmpeg: &Path, plan: &Plan, input: &Path, output: &Path) -> Result<(), ConvertError> {

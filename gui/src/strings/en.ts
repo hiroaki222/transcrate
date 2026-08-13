@@ -1,5 +1,14 @@
 import type { Strings } from "./index";
 
+/**
+ * A count and its noun, agreeing.
+ *
+ * Japanese needs none of this, so the shared string keys take a bare number and
+ * the agreement has to happen here.
+ */
+const many = (count: number, noun: string) =>
+  `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
+
 /** English. Typed against the Japanese set, so a missing key will not compile. */
 export const en: Strings = {
   profiles: {
@@ -114,6 +123,42 @@ export const en: Strings = {
     failReason: (filesystem, names) => `Does not read ${filesystem}. ${names}`,
     fix: "Fix",
     fixNote: (count) => `Formatted FAT32, all ${count} would read it.`,
+  },
+
+  scan: {
+    title: "CONTENTS",
+    reading: (done, total) =>
+      `Reading ${done.toLocaleString()} of ${total.toLocaleString()}`,
+    summary: (tracks, folders, deepest) =>
+      `${many(tracks, "track")}, ${many(folders, "folder")}, ${deepest} levels deep`,
+    otherFiles: (count) => `${many(count, "other file")}, which no player lists.`,
+    noTracks: "No tracks on this drive.",
+    allPlay: (count) => `All ${many(count, "track")} play on the chosen players.`,
+    // "will play" rather than "play", which would have to agree with the first
+    // number: "1 of 2 tracks plays" is correct and reads like a mistake.
+    someFail: (plays, total) =>
+      `${plays.toLocaleString()} of ${many(total, "track")} will play on the chosen players.`,
+
+    /*
+      All three are a count and a relative clause, never a count and a verb.
+      "1 folder never appears" and "2 folders never appear" would each need
+      their own agreement; "1 folder the player never shows" needs none.
+    */
+    // The drive mounts and the files are there — the browser simply stops.
+    // Saying only "too deep" leaves it sounding cosmetic.
+    deepTitle: (count) => `${many(count, "folder")} the player never shows`,
+    deepNote: (limit) =>
+      `The browser stops at ${limit} levels. Nothing inside these can be selected.`,
+    crowdedTitle: (count) => `${many(count, "folder")} the player cuts short`,
+    crowdedNote: (limit) =>
+      `A folder lists at most ${limit.toLocaleString()} entries.`,
+    crowdedEntries: (entries) =>
+      `${entries.toLocaleString()} ${entries === 1 ? "entry" : "entries"}`,
+    failingTitle: (count) =>
+      `${many(count, "track")} at least one player will not take`,
+    failingNote: "Drop them on CONVERT to see what they would become.",
+    root: "drive root",
+    andMore: (rest) => `and ${rest.toLocaleString()} more`,
   },
 
   devices: {

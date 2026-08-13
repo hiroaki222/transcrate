@@ -163,6 +163,49 @@ pub(crate) struct Drive {
     pub(crate) readable: usize,
 }
 
+/// What is on the drive, measured against what the players allow.
+///
+/// Counts rather than the paths themselves, except where a path is the answer:
+/// "eight folders too deep" is not actionable, and the folder's name is.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct Contents {
+    pub(crate) tracks: usize,
+    pub(crate) folders: usize,
+    pub(crate) other_files: usize,
+    pub(crate) deepest: u8,
+    /// The limits the drive was judged against, so the window can say which
+    /// number was broken rather than hard-coding one.
+    pub(crate) depth_limit: u8,
+    pub(crate) entry_limit: Option<u32>,
+    /// Folders the browser never reaches, named relative to the drive.
+    pub(crate) unreachable: Vec<String>,
+    pub(crate) crowded: Vec<Crowded>,
+    /// Only the tracks at least one player refuses. A stick holds thousands and
+    /// the ones that work need no attention.
+    pub(crate) failing: Vec<FailingTrack>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct Crowded {
+    pub(crate) folder: String,
+    pub(crate) entries: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FailingTrack {
+    pub(crate) path: String,
+    pub(crate) name: String,
+    /// Where it sits on the drive: two tracks of the same name in different
+    /// folders are otherwise indistinguishable.
+    pub(crate) folder: String,
+    pub(crate) spec: Option<AudioSpec>,
+    pub(crate) lamps: Vec<Lamp>,
+    pub(crate) error: Option<String>,
+}
+
 pub(crate) const fn filesystem_name(filesystem: FileSystem) -> &'static str {
     match filesystem {
         FileSystem::Fat16 => "FAT16",
