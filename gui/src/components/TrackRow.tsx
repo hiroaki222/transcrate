@@ -31,7 +31,17 @@ export function TrackRow({
 
   const failing = track.now.filter((lamp) => !lamp.ok).length;
   const state = track.error !== null || failing > 0 ? "ng" : "ok";
-  const reasons = groupReasons(t, track.now);
+
+  /*
+    Reasons for what will still be wrong, not for what is wrong now. Opened,
+    an ALAC track bound for AIFF used to explain that three players do not read
+    ALAC — directly under a second strip showing all ten of them lit, because
+    the conversion on screen deals with it. The reader is left to work out that
+    the complaint is about the file they are replacing.
+  */
+  const settled = track.after.length > 0 ? track.after : track.now;
+  const reasons = groupReasons(t, settled);
+  const mended = failing > 0 && reasons.length === 0;
 
   return (
     <div
@@ -105,6 +115,10 @@ export function TrackRow({
         <LampStrip when={t.track.lampsNow} lamps={track.now} onBlue={selected} />
         {changesAnything(track) && (
           <LampStrip when={t.track.lampsAfter} lamps={track.after} onBlue={selected} />
+        )}
+
+        {selected && mended && (
+          <p className="why mended">{t.track.mended(track.after.length)}</p>
         )}
 
         {selected && reasons.length > 0 && (

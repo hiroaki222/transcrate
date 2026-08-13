@@ -454,19 +454,31 @@ select {
   background: var(--green-solid);
 }
 
+/*
+  Blue, because that is the colour a player marks a selection with, but as a
+  ground rather than a flood. Filled solid, an opened row is the brightest
+  thing on a black screen and the ten lamps that are the point of it have to
+  compete with their own background.
+*/
 .row[data-sel] {
-  background: var(--blue);
+  background: linear-gradient(
+    90deg,
+    rgba(11, 132, 255, 0.22) 0%,
+    rgba(11, 132, 255, 0.11) 42%,
+    rgba(11, 132, 255, 0.06) 100%
+  );
 }
+
 
 .row[data-sel] .row-spec,
 .row[data-sel] .row-no,
 .row[data-sel] .lamps-when {
-  color: #d6e9ff;
+  color: #a8c8ea;
 }
 
 .row[data-sel] .row-doing {
-  border-color: #7fbaff;
-  color: #d6e9ff;
+  border-color: #3d7ec4;
+  color: #a8c8ea;
 }
 
 .row-main {
@@ -565,14 +577,6 @@ select {
   cursor: default;
 }
 
-.row[data-sel] .row-judge.ng {
-  color: #ffd6d4;
-}
-
-.row[data-sel] .row-judge.ok {
-  color: #c6ffd9;
-}
-
 .row-spec {
   display: flex;
   align-items: center;
@@ -615,6 +619,13 @@ select {
   padding: 8px 12px;
   background: rgba(0, 0, 0, 0.42);
   border-left: 2px solid var(--red);
+}
+
+/* The same block, saying the opposite thing, so it is not the same colour. */
+.why.mended {
+  border-left-color: var(--green-solid);
+  font-size: 12.5px;
+  color: #b9f3cd;
 }
 
 .why-line {
