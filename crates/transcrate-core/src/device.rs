@@ -70,7 +70,6 @@ pub enum FileSystem {
 pub struct LossyLimits {
     /// Inclusive `(min, max)` in kbps.
     pub bitrate_kbps: (u16, u16),
-    pub vbr: Support,
 }
 
 /// What one device accepts for one codec.
@@ -104,9 +103,6 @@ pub struct DeviceProfile {
     pub max_folder_depth: u8,
     /// Entries beyond this are not listed by the browser.
     pub max_files_per_folder: Option<u32>,
-    /// Longest artwork edge in pixels; larger images are not displayed. `None`
-    /// where the manual states no limit.
-    pub max_artwork_px: Option<u32>,
 }
 
 impl DeviceProfile {
@@ -138,26 +134,24 @@ const DEPTHS_PCM: &[u8] = &[16, 24];
 /// Every player lists MP3 and AAC as 16-bit only.
 const DEPTHS_LOSSY: &[u8] = &[16];
 
-const fn mp3(sample_rates_hz: &'static [u32], vbr: Support) -> FormatSupport {
+const fn mp3(sample_rates_hz: &'static [u32]) -> FormatSupport {
     FormatSupport {
         codec: Codec::Mp3,
         sample_rates_hz,
         bit_depths: DEPTHS_LOSSY,
         lossy: Some(LossyLimits {
             bitrate_kbps: (32, 320),
-            vbr,
         }),
     }
 }
 
-const fn aac(sample_rates_hz: &'static [u32], vbr: Support) -> FormatSupport {
+const fn aac(sample_rates_hz: &'static [u32]) -> FormatSupport {
     FormatSupport {
         codec: Codec::AacLc,
         sample_rates_hz,
         bit_depths: DEPTHS_LOSSY,
         lossy: Some(LossyLimits {
             bitrate_kbps: (16, 320),
-            vbr,
         }),
     }
 }
@@ -177,8 +171,8 @@ const fn lossless(codec: Codec, sample_rates_hz: &'static [u32]) -> FormatSuppor
 /// None of these manuals state whether VBR is accepted; the CBR/VBR column that
 /// earlier models carried was dropped rather than answered.
 const FORMATS_HIRES: &[FormatSupport] = &[
-    mp3(RATES_STD, Support::Unknown),
-    aac(RATES_STD, Support::Unknown),
+    mp3(RATES_STD),
+    aac(RATES_STD),
     lossless(Codec::PcmWav, RATES_HIRES),
     lossless(Codec::PcmAiff, RATES_HIRES),
     lossless(Codec::Alac, RATES_HIRES),
@@ -188,8 +182,8 @@ const FORMATS_HIRES: &[FormatSupport] = &[
 /// XDJ-AN and OMNIS-DUO: the same four lossless formats as above, but capped at
 /// 48 kHz. Being newer does not mean accepting more here.
 const FORMATS_LOSSLESS_48K: &[FormatSupport] = &[
-    mp3(RATES_STD, Support::Unknown),
-    aac(RATES_STD, Support::Unknown),
+    mp3(RATES_STD),
+    aac(RATES_STD),
     lossless(Codec::PcmWav, RATES_STD),
     lossless(Codec::PcmAiff, RATES_STD),
     lossless(Codec::Alac, RATES_STD),
@@ -199,8 +193,8 @@ const FORMATS_LOSSLESS_48K: &[FormatSupport] = &[
 /// CDJ-2000NXS2: hi-res lossless like the 2020+ generation, but with the older
 /// lossy table that still includes 32 kHz.
 const FORMATS_NXS2: &[FormatSupport] = &[
-    mp3(RATES_WITH_32K, Support::Yes),
-    aac(RATES_WITH_32K, Support::Yes),
+    mp3(RATES_WITH_32K),
+    aac(RATES_WITH_32K),
     lossless(Codec::PcmWav, RATES_HIRES),
     lossless(Codec::PcmAiff, RATES_HIRES),
     lossless(Codec::Alac, RATES_HIRES),
@@ -210,8 +204,8 @@ const FORMATS_NXS2: &[FormatSupport] = &[
 /// XDJ-RX3 and XDJ-XZ: FLAC yes, ALAC no. On the XZ, FLAC arrived in firmware
 /// 1.10 rather than at launch.
 const FORMATS_FLAC_NO_ALAC: &[FormatSupport] = &[
-    mp3(RATES_WITH_32K, Support::Yes),
-    aac(RATES_WITH_32K, Support::Yes),
+    mp3(RATES_WITH_32K),
+    aac(RATES_WITH_32K),
     lossless(Codec::PcmWav, RATES_STD),
     lossless(Codec::PcmAiff, RATES_STD),
     lossless(Codec::Flac, RATES_STD),
@@ -220,8 +214,8 @@ const FORMATS_FLAC_NO_ALAC: &[FormatSupport] = &[
 /// XDJ-RR: uncompressed PCM only. No FLAC, no ALAC, in any firmware — the word
 /// "FLAC" does not appear anywhere in its manual.
 const FORMATS_PCM_ONLY: &[FormatSupport] = &[
-    mp3(RATES_WITH_32K, Support::Yes),
-    aac(RATES_WITH_32K, Support::Yes),
+    mp3(RATES_WITH_32K),
+    aac(RATES_WITH_32K),
     lossless(Codec::PcmWav, RATES_STD),
     lossless(Codec::PcmAiff, RATES_STD),
 ];
@@ -269,7 +263,6 @@ pub const DEVICES: &[DeviceProfile] = &[
         filesystems: FS_WITH_EXFAT,
         max_folder_depth: 8,
         max_files_per_folder: Some(10_000),
-        max_artwork_px: None,
     },
     DeviceProfile {
         id: "cdj-3000",
@@ -280,7 +273,6 @@ pub const DEVICES: &[DeviceProfile] = &[
         filesystems: FS_WITH_EXFAT,
         max_folder_depth: 8,
         max_files_per_folder: Some(10_000),
-        max_artwork_px: None,
     },
     DeviceProfile {
         id: "cdj-2000nxs2",
@@ -291,7 +283,6 @@ pub const DEVICES: &[DeviceProfile] = &[
         filesystems: FS_NO_EXFAT,
         max_folder_depth: 8,
         max_files_per_folder: Some(10_000),
-        max_artwork_px: None,
     },
     DeviceProfile {
         id: "xdj-az",
@@ -302,7 +293,6 @@ pub const DEVICES: &[DeviceProfile] = &[
         filesystems: FS_WITH_EXFAT,
         max_folder_depth: 8,
         max_files_per_folder: Some(10_000),
-        max_artwork_px: None,
     },
     DeviceProfile {
         id: "xdj-an",
@@ -313,7 +303,6 @@ pub const DEVICES: &[DeviceProfile] = &[
         filesystems: FS_WITH_EXFAT,
         max_folder_depth: 8,
         max_files_per_folder: Some(10_000),
-        max_artwork_px: Some(800),
     },
     DeviceProfile {
         id: "xdj-xz",
@@ -324,7 +313,6 @@ pub const DEVICES: &[DeviceProfile] = &[
         filesystems: FS_EXFAT_DISPUTED,
         max_folder_depth: 8,
         max_files_per_folder: Some(10_000),
-        max_artwork_px: None,
     },
     DeviceProfile {
         id: "xdj-rx3",
@@ -335,7 +323,6 @@ pub const DEVICES: &[DeviceProfile] = &[
         filesystems: FS_WITH_EXFAT,
         max_folder_depth: 8,
         max_files_per_folder: Some(10_000),
-        max_artwork_px: None,
     },
     DeviceProfile {
         id: "xdj-rr",
@@ -346,7 +333,6 @@ pub const DEVICES: &[DeviceProfile] = &[
         filesystems: FS_NO_EXFAT,
         max_folder_depth: 8,
         max_files_per_folder: Some(10_000),
-        max_artwork_px: Some(800),
     },
     DeviceProfile {
         id: "omnis-duo",
@@ -357,7 +343,6 @@ pub const DEVICES: &[DeviceProfile] = &[
         filesystems: FS_WITH_EXFAT,
         max_folder_depth: 8,
         max_files_per_folder: Some(10_000),
-        max_artwork_px: Some(800),
     },
     DeviceProfile {
         id: "opus-quad",
@@ -368,7 +353,6 @@ pub const DEVICES: &[DeviceProfile] = &[
         filesystems: FS_WITH_EXFAT,
         max_folder_depth: 8,
         max_files_per_folder: Some(10_000),
-        max_artwork_px: None,
     },
 ];
 
