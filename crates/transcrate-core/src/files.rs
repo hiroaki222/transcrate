@@ -4,9 +4,44 @@
 //! arrive here as the same thing, and all three want the same answers: which of
 //! these are audio, what is inside that folder, and where does the result go.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::device::Codec;
+
+/// A path with its `.` and `..` segments taken out, without asking the disk.
+///
+/// Two names for one file are different strings, and the guard that refuses to
+/// write over a source compares strings: `track.mp3` and `./track.mp3` are the
+/// same file, and `transcrate convert track.mp3 -o .` walked straight past the
+/// guard and had ffmpeg read and write one file at once.
+///
+/// Done textually rather than with `canonicalize`, which asks the filesystem
+/// about a path — and a destination is a path that does not exist yet.
+///
+/// A `..` that follows a symlinked directory does not mean what this takes it
+/// to mean. Being wrong that way makes two paths look like one file more often
+/// than they are, and for both callers that only ever refuses work.
+#[must_use]
+pub fn without_dot_segments(path: &Path) -> PathBuf {
+    let mut settled = PathBuf::new();
+
+    for part in path.components() {
+        match part {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                // Nothing above a leading `..` for it to cancel, so it stays.
+                if matches!(settled.components().next_back(), Some(Component::Normal(_))) {
+                    settled.pop();
+                } else {
+                    settled.push("..");
+                }
+            }
+            named => settled.push(named),
+        }
+    }
+
+    settled
+}
 
 /// The containers this program reads.
 ///
@@ -200,7 +235,7 @@ pub fn output_path(
     let mut destination = root.join(kept.unwrap_or(Path::new(""))).join(stem);
     destination.set_extension(extension_for(codec));
 
-    if destination == input {
+    if without_dot_segments(&destination) == without_dot_segments(input) {
         return Err(PathError::WouldOverwriteSource(input.to_path_buf()));
     }
 
@@ -479,6 +514,45 @@ mod tests {
         );
 
         assert!(matches!(refused, Err(PathError::WouldOverwriteSource(_))));
+    }
+
+    /// The guard against writing over a source compares paths, and two names
+    /// for one file are two paths. `transcrate convert track.mp3 -o .` gave
+    /// ffmpeg one file to read and write at the same time.
+    #[test]
+    fn a_source_named_another_way_is_still_the_source() {
+        let refused = output_path(
+            Path::new("track.mp3"),
+            Some(Path::new(".")),
+            None,
+            Codec::Mp3,
+        );
+        assert!(matches!(refused, Err(PathError::WouldOverwriteSource(_))));
+
+        let also_refused = output_path(
+            Path::new("music/track.mp3"),
+            Some(Path::new("music/../music")),
+            None,
+            Codec::Mp3,
+        );
+        assert!(matches!(
+            also_refused,
+            Err(PathError::WouldOverwriteSource(_))
+        ));
+    }
+
+    /// A `..` with nothing above it cannot be cancelled, and dropping it would
+    /// turn a path pointing outside the folder into one pointing inside it.
+    #[test]
+    fn a_leading_parent_segment_survives() {
+        assert_eq!(
+            without_dot_segments(Path::new("../music/./track.mp3")),
+            Path::new("../music/track.mp3")
+        );
+        assert_eq!(
+            without_dot_segments(Path::new("/music/sets/../track.mp3")),
+            Path::new("/music/track.mp3")
+        );
     }
 
     /// Both live in `.m4a`, which is the whole reason a codec is read from the

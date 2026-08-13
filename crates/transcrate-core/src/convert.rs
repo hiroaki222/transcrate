@@ -229,10 +229,14 @@ fn clashes(pairs: &[Option<(&Path, &Path)>]) -> Vec<Option<Clash>> {
 /// the same comparison only ever refuses a pair that would in fact have worked,
 /// which is the safe way to be wrong about it.
 fn same_file_key(path: &Path) -> OsString {
+    // `.` and `..` first, or two spellings of one destination are two keys and
+    // the clash goes unseen.
+    let settled = files::without_dot_segments(path);
+
     if cfg!(any(target_os = "macos", target_os = "windows")) {
-        OsString::from(path.to_string_lossy().to_lowercase())
+        OsString::from(settled.to_string_lossy().to_lowercase())
     } else {
-        path.as_os_str().to_os_string()
+        settled.into_os_string()
     }
 }
 
@@ -394,6 +398,19 @@ mod tests {
         assert_eq!(verdicts[0], None);
         assert_eq!(verdicts[1], Some(Clash::SameOutput(3)));
         assert_eq!(verdicts[3], Some(Clash::SameOutput(1)));
+    }
+
+    /// One destination spelled two ways is one destination. Compared as written,
+    /// the clash is invisible and both conversions run.
+    #[test]
+    fn a_destination_spelled_another_way_is_the_same_destination() {
+        let verdicts = clashes(&[
+            pair("/music/mix.wav", "/music/out/mix.mp3"),
+            pair("/music/mix.flac", "/music/sets/../out/./mix.mp3"),
+        ]);
+
+        assert_eq!(verdicts[0], Some(Clash::SameOutput(1)));
+        assert_eq!(verdicts[1], Some(Clash::SameOutput(0)));
     }
 
     #[cfg(any(target_os = "macos", target_os = "windows"))]

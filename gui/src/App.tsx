@@ -250,13 +250,20 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
 
     try {
       const done = await convertAll(dropped, settings);
+
+      /*
+        The list is re-read before the report goes up, not after. Examining
+        clears the last conversion's outcome on its way in — which is right
+        when a new set of tracks arrives and wrong here, where it took down
+        the report of the conversion that had just finished, along with the
+        name and reason of every track that failed.
+      */
+      await examine(dropped);
       setOutcomes(done);
 
       // Show where it landed, rather than leaving people to hunt for it.
       const landing = shallowest(done);
       if (landing !== null) await revealItemInDir(landing);
-
-      await examine(dropped);
     } catch (error) {
       setFailure(String(error));
     } finally {
