@@ -79,7 +79,6 @@ export const en: Strings = {
   done: {
     converted: (count) => `Converted ${count}`,
     failed: (count) => `${count} could not be converted`,
-    reveal: "Show where they went",
     dismiss: "Close",
   },
 

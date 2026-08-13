@@ -286,7 +286,6 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
   // leaves the one file that needs attention to be found by hand.
   const refused = outcomes?.filter((outcome) => outcome.error !== null) ?? [];
 
-  const landed = outcomes === null ? null : shallowest(outcomes);
   const missing = tools !== null && (!tools.ffmpeg || !tools.ffprobe);
 
   const tabs: [Tab, string][] = [
@@ -368,27 +367,22 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
 
           {failure !== null && <div className="failure">{failure}</div>}
 
-          {outcomes !== null && (
-            <div className="done" data-partial={refused.length > 0 ? "" : undefined}>
+          {/*
+            Only when something went wrong. A conversion that worked announces
+            itself: the folder it wrote to opens, and every row on screen is
+            re-read and shows what it became. A panel saying so as well is one
+            more thing to dismiss on the way to the next set.
+          */}
+          {refused.length > 0 && (
+            <div className="done" data-partial="">
               <span className="done-mark" />
               <span className="done-text">
                 {t.done.converted(converted)}
-                {refused.length > 0 && (
-                  <span className="done-failed">
-                    {t.done.failed(refused.length)}
-                  </span>
-                )}
+                <span className="done-failed">
+                  {t.done.failed(refused.length)}
+                </span>
               </span>
               <span className="push" />
-              {landed !== null && (
-                <button
-                  className="box-btn"
-                  onClick={() => void revealItemInDir(landed)}
-                  type="button"
-                >
-                  {t.done.reveal}
-                </button>
-              )}
               <button
                 className="box-btn"
                 onClick={() => setOutcomes(null)}

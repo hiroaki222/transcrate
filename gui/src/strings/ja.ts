@@ -70,7 +70,6 @@ export const ja = {
   done: {
     converted: (count: number) => `${count}曲を変換しました`,
     failed: (count: number) => `${count}曲は変換できませんでした`,
-    reveal: "保存先を開く",
     dismiss: "閉じる",
   },
 
