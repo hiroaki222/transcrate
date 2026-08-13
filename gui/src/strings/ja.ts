@@ -80,6 +80,10 @@ export const ja = {
 
   track: {
     unreadable: "読み込めません",
+    // What to do about it, rather than what is wrong with it. Every row here
+    // is a file about to be converted, and "再生できません" reads as a dead end
+    // for a state the conversion settles.
+    convert: "変換が必要",
     remove: "リストから外す",
     dither: "ディザ",
     // Read on hover, and by anything reading the row aloud. The bitrate is
@@ -104,14 +108,6 @@ export const ja = {
     copy: "そのままコピー",
     retag: "曲情報だけ更新",
     encode: "変換",
-  },
-
-  verdict: {
-    allPlay: (count: number) => `${count}機種すべてで再生できます`,
-    // What to do about it, rather than what is wrong with it. On this screen
-    // every one of these is a file about to be converted, and "再生できません"
-    // reads as a dead end for a state the conversion below it settles.
-    convert: "変換が必要",
   },
 
   issue: {

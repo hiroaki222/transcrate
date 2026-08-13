@@ -89,6 +89,7 @@ export const en: Strings = {
 
   track: {
     unreadable: "Cannot be read",
+    convert: "Needs converting",
     remove: "Take out of the list",
     dither: "dithered",
     thin: "Low-quality source",
@@ -106,12 +107,6 @@ export const en: Strings = {
     copy: "copied as is",
     retag: "tags only",
     encode: "encoded",
-  },
-
-  verdict: {
-    allPlay: (count) => `Plays on all ${count}`,
-    // What to do about it, rather than what is wrong with it.
-    convert: "Needs converting",
   },
 
   issue: {

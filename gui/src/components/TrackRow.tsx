@@ -1,6 +1,6 @@
 import type { Track } from "../api";
 import { useStrings } from "../strings";
-import { actionName, describeSpec, groupReasons, verdict } from "../text";
+import { actionName, describeSpec, groupReasons } from "../text";
 import { LampStrip } from "./LampStrip";
 
 type Props = {
@@ -63,14 +63,21 @@ export function TrackRow({
       <div className="row-main">
         <div className="row-head">
           <span className="row-no">{String(index + 1).padStart(3, "0")}</span>
-          <span className="row-name">{track.name}</span>
-          {track.error === null ? (
-            <span className={failing > 0 ? "row-judge ng" : "row-judge ok"}>
-              {verdict(t, track.now)}
-            </span>
-          ) : (
+
+          {/*
+            Ahead of the name, and only when there is something to do. A track
+            that plays everywhere needs no label saying so: down a list of
+            forty it is forty labels for the tracks that want nothing, and the
+            few that do want something have to be found among them.
+          */}
+          {track.error !== null && (
             <span className="row-judge ng">{t.track.unreadable}</span>
           )}
+          {track.error === null && failing > 0 && (
+            <span className="row-judge ng">{t.track.convert}</span>
+          )}
+
+          <span className="row-name">{track.name}</span>
           <span className="push" />
 
           {/*

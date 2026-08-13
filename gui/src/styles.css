@@ -525,10 +525,6 @@ select {
   color: var(--red);
 }
 
-.row-judge.ok {
-  color: var(--green);
-}
-
 /*
   A mark, not a sentence. What it reports is a fact about the file rather than
   anything to be done about it, and a worded tag beside the verdict read as a
