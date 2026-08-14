@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*", "gui/src-tauri"]
 
 [workspace.package]
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 # 1.88 for let-chains, which keep the compatibility checks flat.
 rust-version = "1.88"
