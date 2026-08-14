@@ -5,28 +5,27 @@
 Convert tracks for your USB stick, and know they will play before you get to the
 club.
 
-[**Download**](https://github.com/hiroaki222/transcrate/releases/latest) — a
+[**Download**](https://github.com/hiroaki222/transcrate/releases/latest): a
 `.dmg` for Apple silicon, an `.exe` for Windows. Both carry their own ffmpeg, so
 there is nothing else to install.
 
 ![The app, with a folder of tracks and what each one will play on](docs/images/convert.png)
 
-Each track shows ten lights, one per player, always in the same order. Failing
-lights are hatched as well as red, so reading them does not depend on colour.
-Under a target that makes no promise about playback a second row shows what the
-conversion would leave; under the two that do promise it, there is nothing left
-to say and the row is not drawn.
+Each track shows ten lights, one per player, in a fixed order. Failing lights
+are hatched as well as red, so reading them does not depend on colour. Under a
+target that makes no promise about playback, a second row shows what the
+conversion would leave. The two targets that do promise it get no second row.
 
-There is a command line too, and a compatibility table taken from the
-manufacturers' manuals. Everything below is one of those three.
+A command line does the same work, and both read the same compatibility table,
+taken from the manufacturers' manuals.
 
 ## Why this exists
 
 DJ gear disagrees with itself, and not in ways you can guess:
 
 - **A CDJ-2000NXS2 from 2016 plays 96 kHz FLAC. An XDJ-AN from 2026 stops at
-  48 kHz.** Newer is not better.
-- **That same NXS2 cannot read an exFAT stick.** Everything from 2020 on can —
+  48 kHz.** Release year does not predict the limits.
+- **That same NXS2 cannot read an exFAT stick.** Everything from 2020 on can,
   except the XDJ-RX3, which reads exFAT and refuses 96 kHz. The limits cross,
   so you cannot rank the players on one scale.
 - **`.m4a` holds either AAC or ALAC.** Some players take only AAC and throw
@@ -53,52 +52,83 @@ CDJ-2000NXS2   2016     48k   48k    96k    96k    96k    96k  no
 Every figure is from a manufacturer's manual, with the document number recorded
 in [docs/device-compatibility.md](docs/device-compatibility.md).
 
-Where the official sources contradict each other — the XDJ-XZ and exFAT — the
-table says so rather than picking a side. The app takes the stricter reading and
-shows a plain no, because that is not something you can settle in a booth.
+The official sources contradict each other about the XDJ-XZ and exFAT, and the
+table says so. The app takes the stricter reading and shows a plain no, because
+you cannot settle that in a booth.
 
 ## The app
 
 [Download it](https://github.com/hiroaki222/transcrate/releases/latest), open
 it, and drag tracks or a folder onto it.
 
-Neither build is signed with a paid certificate — Apple's costs $99 a year,
-which is hard to justify before anyone is using this — so both systems warn the
-first time it opens. Allowing it once is enough. Apple documents the macOS side:
+Neither build is signed with a paid certificate, so both systems warn the first
+time it opens. Apple's certificate costs $99 a year, which is hard to justify
+before anyone is using this. Allowing it once is enough. Apple documents the
+macOS side:
 [Open a Mac app from an unknown developer][unsigned-mac]. On Windows,
 SmartScreen asks for **More info → Run anyway**.
 
 Three screens:
 
-- **CONVERT** — each row says what the file is, what it would become, and ten
+- **CONVERT**: each row says what the file is, what it would become, and ten
   lights: one per player, green where it plays and hatched red where it will
-  not. Only the rows that want something are labelled, so a list of forty is
-  scanned rather than read. A source already under 192 kbps carries a caution
-  of its own: it plays, and converting cannot put back what its first encoder
-  threw away.
+  not. Only the rows that want something are labelled, so you can scan a list
+  of forty instead of reading every line. A source already under 192 kbps
+  carries a caution of its own: it plays, and converting cannot put back what
+  its first encoder threw away.
 
   ![Each track with its verdict now and after converting](docs/images/convert.png)
 
-- **USB CHECK** — pick from the drives that are plugged in. It reports the
+- **USB CHECK**: pick from the drives that are plugged in. It reports the
   filesystem, then reads every track on the drive and names the ones a player
   will refuse. It also measures the tree: the players stop at eight folder
   levels and list ten thousand entries per folder, and past either of those a
-  drive mounts, the tracks are there, and the browser shows nothing. A folder
-  that could not be read is named too, and while anything is missing the
-  summary does not call the drive clean. Read-only, and there is no format
-  button.
+  drive mounts, the tracks are there, and the browser shows nothing. It names
+  any folder it could not read, and while anything is missing the summary does
+  not call the drive clean. Read-only, with no format button.
 
   ![A drive checked against every player](docs/images/usb-check.png)
 
-- **DEVICES** — the table above, release year beside each player.
+- **DEVICES**: the table above, release year beside each player.
 
-The interface follows whatever language the machine is set to, Japanese or
-English, and can be pinned to either.
+The app uses whatever language the machine is set to, Japanese or English, and
+you can pin either one.
 
 ## The command line
 
-The release carries an archive per platform holding one binary. This one expects
-ffmpeg on your PATH; only the app brings its own.
+This one expects ffmpeg on your PATH; only the app brings its own.
+
+On macOS and Linux, Homebrew is the shorter way in, because it brings ffmpeg
+with it:
+
+```sh
+brew install hiroaki222/tap/transcrate
+```
+
+Otherwise take the archive for your platform from the release. It holds the
+binary and nothing that installs it. The names carry the target:
+
+| | |
+|---|---|
+| Apple silicon | `transcrate-<version>-aarch64-apple-darwin.tar.gz` |
+| Linux x86-64 | `transcrate-<version>-x86_64-unknown-linux-gnu.tar.gz` |
+| Windows x86-64 | `transcrate-<version>-x86_64-pc-windows-msvc.zip` |
+
+```sh
+tar -xzf transcrate-*-aarch64-apple-darwin.tar.gz
+sudo mv transcrate /usr/local/bin/
+```
+
+macOS quarantines a downloaded binary and refuses the first run without a word
+about why. Clear it once:
+
+```sh
+xattr -d com.apple.quarantine /usr/local/bin/transcrate
+```
+
+Windows: unzip it and put `transcrate.exe` somewhere on your PATH. Either way,
+ffmpeg has to be there too: `brew install ffmpeg`, or whatever your system
+uses.
 
 ```sh
 transcrate convert ~/Music
@@ -112,14 +142,13 @@ transcrate convert *                    # whatever the shell expands, audio only
 transcrate convert a.wav b.flac         # named one by one
 ```
 
-A folder sweep and a glob both keep only the audio, so artwork and playlists are
-skipped rather than reported as failures. A previous run's `_transcrate` folder
-is skipped too, and converting twice does not re-encode what came out the first
-time.
+A folder sweep and a glob both keep only the audio, so artwork and playlists
+never show up as failures. It skips a previous run's `_transcrate` folder too,
+so converting twice does not re-encode what came out the first time.
 
-One path named on its own is always attempted, whatever its extension: someone
-who typed a single filename meant that file, and ffprobe judges it better than
-the extension does.
+Transcrate tries a path named on its own whatever its extension: someone who
+typed a single filename meant that file, and ffprobe judges it better than the
+extension does.
 
 Options go on either side of the files, so `convert -p lossless track.wav` and
 `convert track.wav -p lossless` are the same command. Track names full of `&`
@@ -136,18 +165,19 @@ A folder handed over whole keeps its shape: one `_transcrate` beside it, and
 each track written at the depth it was read from. Files named one by one have
 no shape to keep, so each result sits beside its own source.
 
-The source is never written to. Two inputs that would produce the same output —
-`mix.wav` and `mix.flac` in one folder both ask for `mix.mp3` — are both
-refused, rather than one of them quietly overwriting the other.
+The source is never written to. Two inputs that would produce the same output
+are both refused: `mix.wav` and `mix.flac` in one folder both ask for
+`mix.mp3`, and neither of them gets to overwrite the other.
 
-Anything already in the target format is copied rather than re-encoded, which
-is both faster and kinder to a lossy original. A lossy source is never
-re-encoded above the bitrate it arrived with, either: 128 kbps asked for
-`cdj-safe` comes out at 128 kbps, because the same music through a second
-encoder sounds worse than it did and takes two and a half times the space.
+Transcrate copies a file that already matches the target format, which is
+faster and spares a lossy original a second pass through an encoder. A lossy
+source is never re-encoded above the bitrate it arrived with, either: 128 kbps
+asked for `cdj-safe` comes out at 128 kbps, because the same music through a
+second encoder sounds worse than it did and takes two and a half times the
+space.
 
 Files convert in parallel, one per core, and each line appears as that file
-lands — fourteen 60-second 96 kHz FLACs took 2.96 s one at a time and 0.56 s
+lands. Fourteen 60-second 96 kHz FLACs took 2.96 s one at a time and 0.56 s
 across 14 cores here. `-j N` caps the number of jobs.
 
 Three profiles, chosen with `-p`:
@@ -156,7 +186,7 @@ Three profiles, chosen with `-p`:
 |---|---|---|
 | `cdj-safe` (default) | MP3 320 kbps, 44.1 kHz | Plays on every player in the table |
 | `lossless` | AIFF, up to 48 kHz / 24-bit | Lossless and still playable everywhere |
-| `archive` | FLAC, source rate and depth | The copy you keep, not the one you play |
+| `archive` | FLAC, source rate and depth | The copy you keep at home |
 
 Or name a format directly. That changes the container and nothing else, keeping
 the source's rate and depth:
@@ -166,11 +196,11 @@ transcrate convert ~/Music/track.flac --to aiff
 ```
 
 `mp3`, `aac`, `alac`, `flac`, `wav`, `aiff`. A profile carries limits with it
-and a format does not, so a 96 kHz source stays at 96 kHz — run `check` on the
+and a format does not, so a 96 kHz source stays at 96 kHz. Run `check` on the
 result if it is going to a gig.
 
-Reducing bit depth adds dither automatically. Resampling does not, because
-that is not what dither is for.
+Reducing bit depth adds dither. Resampling does not, because that is not what
+dither is for.
 
 ### Checking files
 
@@ -189,8 +219,8 @@ transcrate check ~/Music/track.flac
   XDJ-RR         FLAC is not supported
 ```
 
-Narrow it to the gear you are actually taking, and leave out everything that
-already plays:
+Narrow it to the gear you are taking, and leave out everything that already
+plays:
 
 ```sh
 transcrate check ~/Music --failing -d cdj-3000,xdj-rr
@@ -226,8 +256,8 @@ non-zero if anything is rejected, so it can gate a script.
 
 ### Checking a drive
 
-Named with no path, it lists what is plugged in — on a Mac nobody has the
-mount point memorised:
+Named with no path, it lists what is plugged in, which saves you looking up a
+mount point:
 
 ```sh
 transcrate usb
@@ -259,45 +289,46 @@ transcrate usb /Volumes/DJ
     Set/02 Peak Time.m4a    XDJ-XZ: ALAC is not supported, XDJ-RX3: ALAC is …
 ```
 
-Formatting a stick exFAT is the easy default and it locks out two players that
-are still in plenty of booths. `-d` narrows it to the gear you are actually
+Formatting a stick exFAT is what most tools do by default, and it locks out two
+players that are still in plenty of booths. `-d` narrows it to the gear you are
 plugging into, and it exits non-zero if any of those will not read the drive.
 
 Below the filesystem it reads every track on the drive, which is one ffprobe
-each and the slow half — `--no-tracks` stops after the filesystem. It also
+each and the slow half. `--no-tracks` stops after the filesystem. It also
 measures the tree, because the players stop at eight folder levels and list ten
 thousand entries per folder. Past either of those the drive mounts, the tracks
 are there, and the browser shows nothing.
 
-A folder the walk could not open — permission refused, a stick pulled part way
-through — is named rather than passed over, and the count that follows says it
-covers what was found rather than what is on the drive. A run that could not
-read everything exits non-zero.
+A folder the walk could not open gets named in the report, whether a permission
+was refused or a stick was pulled part way through. The count that follows then
+says it covers what was found, not the whole drive. A run that could not read
+everything exits non-zero.
 
 **Read-only.** Nothing here writes to a drive, formats one or moves a file. A
 tool you run on your own set should not be able to damage it.
 
 ### Tags and artwork
 
-Everything the source carried comes across, except `lyrics-eng`. Nobody reads
-lyrics off a CDJ, and it is where rippers leave their advertising. Title,
-artist, album, genre, key and BPM are what the browser is for, so they stay.
+Everything the source carried comes across, except `lyrics-eng`. You do not
+read lyrics off a CDJ, and that field is where rippers leave their advertising.
+Title, artist, album, genre, key and BPM are what the browser is for, so they
+stay.
 
 The comment stays too. Shops fill it with advertising and a CDJ shows it in the
-browser next to the title, which is an argument for clearing it — but it is
-also where DJs keep their own cue notes and Camelot keys, and those cannot be
-got back. `--clear-comment` empties it when you want that.
+browser next to the title, which is an argument for clearing it. It is also
+where DJs keep their own cue notes and Camelot keys, and those cannot be got
+back. `--clear-comment` empties it when you want that.
 
 Embedded artwork rides along, labelled the way rekordbox and the CDJ browser
 expect to find it. `--no-artwork` drops it instead.
 
-Two details that are easy to lose:
+Two things the muxers get wrong by default:
 
 - **MP3 and AIFF are written as ID3v2.3**, not ffmpeg's default of 2.4. Players
   are more consistent with 2.3.
 - **The AIFF muxer writes no ID3 chunk unless asked**, and the artwork goes with
   it. AIFF's own chunks still carry the title and artist, so the loss shows up
-  as a missing sleeve rather than as an untagged file. That flag is set here.
+  as a missing sleeve instead of an untagged file. Transcrate sets that flag.
 
 To fix tags without touching the audio:
 
@@ -312,9 +343,9 @@ transcrate retag ~/Music
 ```
 
 Every file comes out in the format it went in as, so a folder holding MP3 next
-to AIFF takes one command rather than one per extension. The audio stream is
-copied across untouched: a lossy file loses nothing to a change of text, and
-nothing is spent re-encoding audio that was already correct.
+to AIFF takes one command instead of one per extension. Transcrate copies the
+audio stream across untouched, so a lossy file loses nothing to a change of
+text and no time goes into re-encoding audio that was already correct.
 
 ### Shell completion
 
@@ -373,17 +404,22 @@ Windows, without the bundled ffmpeg that a release carries.
 
 ## Contributing
 
-The same three checks CI runs:
+Run what CI runs:
 
 ```sh
 cargo fmt --all --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
+
+cd gui && bun install --frozen-lockfile && bun run build
 ```
+
+The last one is a separate CI job and the easiest to forget. It typechecks the
+window, so a broken import passes everything above it and fails on the way in.
 
 The integration tests run real conversions and refuse to skip when ffmpeg is
 missing on CI, because they are the only thing checking that the argument lists
-put in front of the encoder actually work.
+put in front of the encoder work.
 
 ## Next
 
@@ -403,9 +439,9 @@ ffmpeg runs as a separate process and is not linked into this program.
 Released builds of the app carry an **LGPL** ffmpeg beside the executable, never
 a GPL one: this program is MIT or Apache-2.0, and a GPL binary in the same
 bundle would carry GPL obligations into it. An LGPL build covers every format
-written here — MP3 through libmp3lame, AAC through ffmpeg's own encoder, and
-FLAC, ALAC and PCM natively. Nobody publishes an LGPL build for macOS at all,
-and the one published for Windows is a full build — 115 MB a binary against the
-4 MB a trimmed one comes to, carried inside every download. So
+written here: MP3 through libmp3lame, AAC through ffmpeg's own encoder, and
+FLAC, ALAC and PCM natively. Nobody publishes an LGPL build for macOS, and the
+one published for Windows is a full build, 115 MB a binary against the 4 MB a
+trimmed one comes to, carried inside every download. So
 [the release workflow compiles both](.github/scripts/build-ffmpeg.sh) from the
 same list of formats, with the GPL-only components left out.
