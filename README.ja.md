@@ -81,7 +81,7 @@ brew install hiroaki222/tap/transcrate
 | Windows x86-64 | `transcrate-<version>-x86_64-pc-windows-msvc.zip` |
 
 ```sh
-tar -xzf transcrate-*-aarch64-apple-darwin.tar.gz
+tar -xzf transcrate-*.tar.gz
 sudo mv transcrate /usr/local/bin/
 ```
 
@@ -91,7 +91,9 @@ macOS ではダウンロードしたバイナリに隔離属性が付き、初�
 xattr -d com.apple.quarantine /usr/local/bin/transcrate
 ```
 
-Windows は zip を展開して `transcrate.exe` を PATH の通った場所に置いてください。どの経路でも ffmpeg は別途必要です (`brew install ffmpeg` など)。
+Windows は zip を展開して `transcrate.exe` を PATH の通った場所に置いてください。
+
+Homebrew なら ffmpeg も一緒に入ります。圧縮ファイルから入れた場合は自分で用意してください。macOS と Linux は `brew install ffmpeg`、Windows は [ffmpeg.org](https://ffmpeg.org/download.html) のビルドを PATH の通った場所に置きます。
 
 ```sh
 transcrate convert ~/Music

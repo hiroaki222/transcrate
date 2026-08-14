@@ -115,7 +115,7 @@ binary and nothing that installs it. The names carry the target:
 | Windows x86-64 | `transcrate-<version>-x86_64-pc-windows-msvc.zip` |
 
 ```sh
-tar -xzf transcrate-*-aarch64-apple-darwin.tar.gz
+tar -xzf transcrate-*.tar.gz
 sudo mv transcrate /usr/local/bin/
 ```
 
@@ -126,9 +126,11 @@ about why. Clear it once:
 xattr -d com.apple.quarantine /usr/local/bin/transcrate
 ```
 
-Windows: unzip it and put `transcrate.exe` somewhere on your PATH. Either way,
-ffmpeg has to be there too: `brew install ffmpeg`, or whatever your system
-uses.
+Windows: unzip it and put `transcrate.exe` somewhere on your PATH.
+
+Homebrew installs ffmpeg alongside it. Take the archive instead and ffmpeg is
+yours to find: `brew install ffmpeg` on macOS or Linux, and on Windows a build
+from [ffmpeg.org](https://ffmpeg.org/download.html) on your PATH.
 
 ```sh
 transcrate convert ~/Music
