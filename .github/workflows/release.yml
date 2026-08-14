@@ -328,6 +328,39 @@ jobs:
           releaseId: ${{ needs.draft.outputs.id }}
           args: --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json
 
+      # Ad-hoc signing the executable is not the same as sealing the bundle
+      # around it. Without a `_CodeSignature` covering the sidecars, macOS
+      # calls the app damaged and offers only the Trash — and that is invisible
+      # here, where the app is never opened, until somebody downloads it.
+      #
+      # The sidecars are found rather than looked for at a fixed path: where
+      # Tauri puts an externalBin inside the bundle is Tauri's business, and a
+      # check that hard-codes it fails on a bundle that is fine.
+      - name: Check the bundle is sealed around its sidecars
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app="$(find target -maxdepth 5 -name 'Transcrate.app' | head -1)"
+          if [ -z "$app" ]; then
+            echo "no Transcrate.app was built" >&2
+            exit 1
+          fi
+
+          for tool in ffmpeg ffprobe; do
+            found="$(find "$app" -type f -name "$tool" | head -1)"
+            if [ -z "$found" ]; then
+              echo "$tool is not inside the bundle" >&2
+              exit 1
+            fi
+            echo "$tool: ${found#"$app"/}"
+          done
+
+          # --deep reaches the nested executables, --strict refuses a seal that
+          # does not match what is actually in the bundle.
+          codesign --verify --deep --strict --verbose=2 "$app"
+
       # Kept whether or not there is a release to attach them to. The size of
       # the download is the reason ffmpeg is built here rather than fetched, and
       # a manual run is where that gets weighed.
