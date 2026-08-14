@@ -1,4 +1,4 @@
-import type { AudioSpec, Codec, Issue, Lamp, Track } from "./api";
+import type { AudioSpec, Codec, Issue, Lamp } from "./api";
 import type { Strings } from "./strings";
 
 const CODECS: Record<Codec, string> = {
@@ -47,16 +47,6 @@ export function describeIssue(t: Strings, issue: Issue): string {
         issue.allowed_kbps[1],
       );
   }
-}
-
-export const actionName = (t: Strings, action: Track["action"]) =>
-  action === null ? "" : t.action[action];
-
-export function verdict(t: Strings, lamps: Lamp[]): string {
-  const bad = lamps.filter((lamp) => !lamp.ok).length;
-  if (bad === 0) return t.verdict.allPlay(lamps.length);
-  if (bad === lamps.length) return t.verdict.nonePlay(lamps.length);
-  return t.verdict.somePlay(bad);
 }
 
 /**

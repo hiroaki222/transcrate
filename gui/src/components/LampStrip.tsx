@@ -30,7 +30,14 @@ export function LampStrip({ when, lamps, onBlue = false }: Props) {
         {lamps.map((lamp) => (
           <span
             key={lamp.id}
+            // The visible text is an abbreviation and the colour carries the
+            // verdict, so read aloud a lamp would be four letters and nothing
+            // else. A title is not reliably announced; a label is.
+            aria-label={
+              lamp.ok ? t.track.playsOn(lamp.name) : t.track.failsOn(lamp.name)
+            }
             className={lamp.ok ? "lamp go" : "lamp stop"}
+            role="img"
             title={
               lamp.ok ? t.track.playsOn(lamp.name) : t.track.failsOn(lamp.name)
             }

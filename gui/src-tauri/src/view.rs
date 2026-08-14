@@ -9,7 +9,6 @@ use serde::Serialize;
 
 use transcrate_core::compat::{self, AudioSpec, Issue};
 use transcrate_core::device::{Codec, DeviceProfile, FileSystem, Support};
-use transcrate_core::plan::Action;
 
 /// The six columns of the compatibility table, in the order they are shown.
 pub(crate) const COLUMNS: [(&str, Codec); 6] = [
@@ -63,9 +62,11 @@ pub(crate) struct Track {
     pub(crate) source: Option<AudioSpec>,
     pub(crate) output: Option<AudioSpec>,
     pub(crate) output_path: Option<String>,
-    /// `copy`, `retag` or `encode`.
-    pub(crate) action: Option<&'static str>,
     pub(crate) dither: bool,
+    /// Whether the source was already short of information. Nothing a
+    /// conversion does can put back what its first encoder threw away, so this
+    /// is the one figure on the screen that cannot be improved.
+    pub(crate) thin: bool,
     /// Verdicts as the file stands.
     pub(crate) now: Vec<Lamp>,
     /// Verdicts on what the conversion would produce.
@@ -83,8 +84,8 @@ impl Track {
             source: None,
             output: None,
             output_path: None,
-            action: None,
             dither: false,
+            thin: false,
             now: Vec::new(),
             after: Vec::new(),
             error: Some(error),
@@ -97,14 +98,6 @@ pub(crate) fn file_name(path: &std::path::Path) -> String {
         .unwrap_or(path.as_os_str())
         .to_string_lossy()
         .into_owned()
-}
-
-pub(crate) const fn action_name(action: Action) -> &'static str {
-    match action {
-        Action::Copy => "copy",
-        Action::Retag => "retag",
-        Action::Encode { .. } => "encode",
-    }
 }
 
 /// One row of the compatibility table.
@@ -184,6 +177,12 @@ pub(crate) struct Contents {
     /// Folders the browser never reaches, named relative to the drive.
     pub(crate) unreachable: Vec<String>,
     pub(crate) crowded: Vec<Crowded>,
+    /// Folders the walk itself could not list. Whatever is inside them is
+    /// missing from every count above.
+    pub(crate) unreadable: Vec<String>,
+    /// Whether any of the three lists above holds something. Answered by the
+    /// core, which is where a fourth kind of gap would be added.
+    pub(crate) has_gaps: bool,
     /// Only the tracks at least one player refuses. A stick holds thousands and
     /// the ones that work need no attention.
     pub(crate) failing: Vec<FailingTrack>,

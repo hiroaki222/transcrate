@@ -78,6 +78,27 @@ pub struct Contents {
     pub unreachable: Vec<PathBuf>,
     /// Folders past [`Limits::entries_per_folder`].
     pub crowded: Vec<Crowded>,
+    /// Folders that could not be listed in full: permission refused, a drive
+    /// pulled out part way through, a directory the filesystem would not read.
+    /// Whatever is inside them is missing from every total above.
+    pub unreadable: Vec<PathBuf>,
+}
+
+impl Contents {
+    /// Whether the totals above describe the whole drive.
+    ///
+    /// Three things put a hole in the picture, and none of them stops the walk:
+    /// a folder the browser will never descend into, a folder it will not list
+    /// to the end, and a folder this program could not read at all. Tracks
+    /// behind any of them are not counted and not judged.
+    ///
+    /// A caller about to say something reassuring — that every track plays,
+    /// that the drive is ready — has to ask this first. Otherwise it is
+    /// reporting an absence of evidence as evidence of absence.
+    #[must_use]
+    pub fn has_gaps(&self) -> bool {
+        !self.unreachable.is_empty() || !self.crowded.is_empty() || !self.unreadable.is_empty()
+    }
 }
 
 /// Walk `root`, measuring it against `limits`.
@@ -99,13 +120,23 @@ fn descend(directory: &Path, level: u8, limits: Limits, contents: &mut Contents)
     contents.deepest = contents.deepest.max(level);
 
     let Ok(entries) = std::fs::read_dir(directory) else {
+        contents.unreadable.push(directory.to_path_buf());
         return;
     };
 
     let mut listed = 0u32;
     let mut subfolders = Vec::new();
+    // A folder can open and still not give up all of it, and an entry lost that
+    // way is as absent from the totals as one behind a folder that would not
+    // open at all.
+    let mut partial = false;
 
-    for entry in entries.flatten() {
+    for entry in entries {
+        let Ok(entry) = entry else {
+            partial = true;
+            continue;
+        };
+
         let name = entry.file_name();
         if name.to_string_lossy().starts_with('.') {
             continue;
@@ -114,6 +145,7 @@ fn descend(directory: &Path, level: u8, limits: Limits, contents: &mut Contents)
         // read_dir's own file type, which does not follow symlinks — unlike
         // Path::is_dir, which does.
         let Ok(kind) = entry.file_type() else {
+            partial = true;
             continue;
         };
         let path = entry.path();
@@ -129,6 +161,10 @@ fn descend(directory: &Path, level: u8, limits: Limits, contents: &mut Contents)
                 contents.other_files += 1;
             }
         }
+    }
+
+    if partial {
+        contents.unreadable.push(directory.to_path_buf());
     }
 
     if limits.entries_per_folder.is_some_and(|most| listed > most) {
@@ -269,6 +305,56 @@ mod tests {
         assert_eq!(contents.deepest, 8);
         assert!(contents.unreachable.is_empty());
         assert_eq!(contents.tracks.len(), 1);
+    }
+
+    /// A stick that comes loose part way through a scan, or a folder written by
+    /// another account, used to end the walk of that branch in silence. The
+    /// tracks behind it went uncounted and the drive came back looking clean.
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_that_will_not_open_is_named_rather_than_skipped() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = scratch("unreadable");
+        std::fs::write(dir.join("visible.wav"), b"").expect("write");
+
+        let shut = dir.join("shut");
+        std::fs::create_dir(&shut).expect("create");
+        std::fs::write(shut.join("hidden.wav"), b"").expect("write");
+        std::fs::set_permissions(&shut, std::fs::Permissions::from_mode(0o000))
+            .expect("close the folder");
+
+        // Root ignores the bit, and CI containers often are root. There the
+        // folder opens and there is nothing here to test.
+        if std::fs::read_dir(&shut).is_ok() {
+            std::fs::set_permissions(&shut, std::fs::Permissions::from_mode(0o755))
+                .expect("reopen");
+            return;
+        }
+
+        let contents = walk(&dir, EVERY_PLAYER);
+
+        // Put back before any assertion, so a failure does not leave a folder
+        // behind that the next run cannot clear away.
+        std::fs::set_permissions(&shut, std::fs::Permissions::from_mode(0o755)).expect("reopen");
+
+        assert_eq!(contents.unreadable.len(), 1);
+        assert!(contents.unreadable[0].ends_with("shut"));
+        assert_eq!(
+            contents.tracks.len(),
+            1,
+            "what was reached is still counted"
+        );
+        assert!(contents.has_gaps());
+    }
+
+    /// The ordinary drive, and the only shape that may be called complete.
+    #[test]
+    fn a_drive_with_nothing_in_the_way_has_no_gaps() {
+        let dir = scratch("no-gaps");
+        std::fs::write(dir.join("one.wav"), b"").expect("write");
+
+        assert!(!walk(&dir, EVERY_PLAYER).has_gaps());
     }
 
     /// The player stops at the limit, so nothing below it is reachable — and

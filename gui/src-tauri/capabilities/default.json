@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "画面が必要とする権限。ファイル選択、進捗イベント、そして変換結果を Finder で表示することだけ。",
+  "description": "What the window needs and nothing more: choosing files, receiving progress events, and revealing a finished conversion in the file manager.",
   "windows": ["main"],
   "permissions": [
     "core:default",

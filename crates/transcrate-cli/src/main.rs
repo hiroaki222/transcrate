@@ -1,13 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, PoisonError};
 
 use clap::builder::PossibleValuesParser;
 use clap::{CommandFactory, Parser, Subcommand, ValueHint};
 use clap_complete::Shell;
 use transcrate_core::convert::ConvertError;
 use transcrate_core::files::{self, PreviousOutput};
-use transcrate_core::plan::{Action, Artwork, MetadataPolicy, Target};
+use transcrate_core::plan::{self, Action, Artwork, MetadataPolicy, Target};
 use transcrate_core::usb;
 use transcrate_core::{
     AudioSpec, Codec, DEVICES, DeviceProfile, FileSystem, Issue, Support, by_id, check, convert,
@@ -108,10 +108,10 @@ Examples:
     /// untouched: a lossy file loses nothing to a change of text.
     #[command(after_help = "\
 Examples:
-  transcrate retag ~/Music                      Clear the comment and the lyrics
+  transcrate retag ~/Music                      Clear the lyrics, keep your notes
   transcrate retag ~/Music --no-artwork         Drop the sleeve as well
-  transcrate retag ~/Music --clear-comment --no-artwork
-                                                Drop the sleeve, keep your notes")]
+  transcrate retag ~/Music --clear-comment      Clear a shop's text out of the
+                                                comment, and your notes with it")]
     Retag(RetagArgs),
 
     /// Check a drive before you take it to a gig.
@@ -337,6 +337,19 @@ fn run_retag(args: &RetagArgs) -> ExitCode {
     )
 }
 
+/// Name the folders the sweep could not list.
+///
+/// Whatever audio was behind them is missing from every count that follows, so
+/// leaving them unsaid turns a partial run into one that looks complete.
+fn report_unreadable(folders: &[PathBuf]) {
+    for folder in folders {
+        eprintln!(
+            "{}: could not be read, and nothing inside it was checked",
+            folder.display()
+        );
+    }
+}
+
 /// Plan every input, run the lot, and report as each lands.
 ///
 /// `target_for` is handed each file's own format, so a caller can either fix
@@ -353,17 +366,20 @@ fn run_jobs(
 
     // Plan everything before encoding anything, so a file that cannot be read
     // is named straight away rather than after minutes of work on the rest.
-    let inputs = files::collect(files, PreviousOutput::Skip);
-    if inputs.is_empty() {
+    let found = files::collect(files, PreviousOutput::Skip);
+    report_unreadable(&found.unreadable);
+
+    if found.files.is_empty() {
         eprintln!("no audio files among the paths given");
         return ExitCode::FAILURE;
     }
 
-    let prepared =
-        convert::prepare_all(&inputs, into, ffprobe, target_for, concurrency, &|_, _| {});
+    let prepared = convert::prepare_all(&found, into, ffprobe, target_for, concurrency, &|_, _| {});
 
     let mut planned = Vec::new();
-    let mut all_done = true;
+    // A folder that would not open is a failure of the run, not a detail of it:
+    // tracks behind it were never planned and never converted.
+    let mut all_done = found.unreadable.is_empty();
 
     for outcome in prepared {
         match outcome {
@@ -376,11 +392,18 @@ fn run_jobs(
     }
 
     let total = planned.len();
-    let done = AtomicUsize::new(0);
+    // Held across the line as well as the count. Numbering the lines and then
+    // racing to print them is how [2/3] arrives above [1/3].
+    let done = Mutex::new(0usize);
 
     let results = convert::run_all(ffmpeg, &planned, concurrency, &|index, result| {
-        let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
-        report_one(finished, total, &planned[index], result);
+        let mut finished = done.lock().unwrap_or_else(PoisonError::into_inner);
+        *finished += 1;
+        let job = &planned[index];
+        // Where the results are rooted, so a line says where the file went
+        // rather than naming the one folder it happens to sit in.
+        let root = into.or_else(|| found.base_of(&job.input));
+        report_one(*finished, total, job, root, result);
     });
 
     all_done &= results.iter().all(Result::is_ok);
@@ -544,10 +567,21 @@ fn report_contents(
         );
     }
 
-    let mut clean = true;
+    // Every count above is a count of what the walk reached, so anything that
+    // leaves a hole in the tree decides this before a single file is read.
+    let clean = !contents.has_gaps();
+
+    if !contents.unreadable.is_empty() {
+        println!("\n  could not be read, so nothing inside it was checked");
+        list(
+            contents
+                .unreadable
+                .iter()
+                .map(|folder| format!("    {}", relative_to(root, folder))),
+        );
+    }
 
     if !contents.unreachable.is_empty() {
-        clean = false;
         println!(
             "\n  past {} folders deep, so the browser never reaches it",
             limits.folder_depth
@@ -561,7 +595,6 @@ fn report_contents(
     }
 
     for crowded in &contents.crowded {
-        clean = false;
         println!(
             "\n  {} holds {} entries, and the browser lists {}",
             relative_to(root, &crowded.folder),
@@ -575,13 +608,12 @@ fn report_contents(
     };
 
     let progress = Progress::new(tracks);
-    let done = AtomicUsize::new(0);
     let verdicts = scan::judge(
         &contents.tracks,
         ffprobe,
         players,
         parallel::default_concurrency(),
-        &|_| progress.show(done.fetch_add(1, Ordering::Relaxed) + 1),
+        &|_| progress.advance(),
     );
     progress.clear();
 
@@ -589,9 +621,19 @@ fn report_contents(
 
     // Said either way round. A drive with one bad track is mostly good news, and
     // reporting only the failure leaves it to be worked out by subtraction.
+    //
+    // The count is of tracks the walk reached, which on a drive with a hole in
+    // it is not the same as the tracks on the drive. Saying so plainly is the
+    // difference between a promise and a report: "all 12 play" reads as a drive
+    // that is ready even when the folders named above hold another hundred.
     if tracks > 0 {
+        // "found" rather than a claim about the drive. A folder the browser
+        // never reaches, one it cuts short, and one that would not open all
+        // leave tracks outside this number, and only one of the three was ever
+        // walked — so no single word covers what is missing except this one.
+        let found = if clean { "" } else { " found" };
         println!(
-            "\n  {} of {tracks} {} will play on every player named",
+            "\n  {} of the {tracks} {}{found} will play on every player named",
             tracks - failing.len(),
             plural(tracks, "track"),
         );
@@ -696,6 +738,7 @@ fn report_one(
     finished: usize,
     total: usize,
     job: &convert::Job,
+    root: Option<&Path>,
     result: &Result<(), ConvertError>,
 ) {
     use std::io::Write;
@@ -715,7 +758,7 @@ fn report_one(
                 out,
                 "[{finished}/{total}] {} -> {}  ({how})",
                 name.display(),
-                enclosing_path(&job.output)
+                landed_at(&job.output, root)
             );
         }
         Err(error) => {
@@ -725,12 +768,19 @@ fn report_one(
     }
 }
 
-/// A path as its own folder and name, which says where a file went without
-/// repeating the whole library path on every line.
-fn enclosing_path(path: &Path) -> String {
-    let name = path.file_name().unwrap_or(path.as_os_str());
+/// Where a result went, said from the folder the results are rooted at.
+///
+/// The whole library path on every line would be unreadable, and the enclosing
+/// folder alone is worse than that: a track nested five deep comes out nested
+/// five deep, and naming only the folder it landed in leaves out the part that
+/// says where to start looking.
+fn landed_at(output: &Path, root: Option<&Path>) -> String {
+    if let Some(under) = root.and_then(|root| output.strip_prefix(root).ok()) {
+        return under.display().to_string();
+    }
 
-    match path.parent().and_then(Path::file_name) {
+    let name = output.file_name().unwrap_or(output.as_os_str());
+    match output.parent().and_then(Path::file_name) {
         Some(folder) => format!("{}/{}", folder.display(), name.display()),
         None => name.display().to_string(),
     }
@@ -811,14 +861,16 @@ fn run_check(
         }
     };
 
-    let inputs = files::collect(files, PreviousOutput::Include);
+    let found = files::collect(files, PreviousOutput::Include);
+    report_unreadable(&found.unreadable);
+
+    let inputs = found.files;
     if inputs.is_empty() {
         eprintln!("no audio files among the paths given");
         return ExitCode::FAILURE;
     }
 
     let progress = Progress::new(inputs.len());
-    let done = AtomicUsize::new(0);
 
     // Read every file first, then report. Probing is one process per file and
     // parallelises; the report has to stay in the order the files were given.
@@ -826,12 +878,13 @@ fn run_check(
         &inputs,
         parallel::default_concurrency(),
         &|_, file| probe::run(ffprobe, file),
-        &|_, _| progress.show(done.fetch_add(1, Ordering::Relaxed) + 1),
+        &|_, _| progress.advance(),
     );
 
     progress.clear();
 
-    let mut all_clear = true;
+    // Nothing here can be called clear while part of the tree went unread.
+    let mut all_clear = found.unreadable.is_empty();
     let mut rejected_count = 0usize;
 
     for (file, outcome) in inputs.iter().zip(specs) {
@@ -879,6 +932,12 @@ fn run_check(
 struct Progress {
     total: usize,
     to_a_terminal: bool,
+    /// The count and the line it is written on, under one lock.
+    ///
+    /// Counted with an atomic and printed afterwards, two workers can take
+    /// their numbers in order and reach the terminal in the other one — the
+    /// counter is then seen going to 2 of 2 and back to 1 of 2.
+    done: Mutex<usize>,
 }
 
 impl Progress {
@@ -887,16 +946,21 @@ impl Progress {
         Self {
             total,
             to_a_terminal: std::io::stderr().is_terminal(),
+            done: Mutex::new(0),
         }
     }
 
-    fn show(&self, done: usize) {
+    /// One more finished, shown as it lands.
+    fn advance(&self) {
         use std::io::Write;
+        let mut done = self.done.lock().unwrap_or_else(PoisonError::into_inner);
+        *done += 1;
+
         if !self.to_a_terminal {
             return;
         }
         let mut err = std::io::stderr().lock();
-        let _ = write!(err, "{}", progress_line(done, self.total));
+        let _ = write!(err, "{}", progress_line(*done, self.total));
         let _ = err.flush();
     }
 
@@ -931,6 +995,16 @@ fn rejected_anywhere(spec: &AudioSpec, players: &[&'static DeviceProfile]) -> bo
 fn report(file: &Path, spec: &AudioSpec, players: &[&'static DeviceProfile]) {
     println!("{}", file.display());
     println!("  {}", describe_spec(spec));
+
+    // Said here and nowhere else in the report, because every other line
+    // answers "will it play" and this one answers "is it worth playing". A
+    // player takes it happily; a room hears the encoder.
+    if plan::sounds_thin(spec) {
+        println!(
+            "  thin           under {} kbps, and converting cannot put it back",
+            plan::THIN_BITRATE_KBPS
+        );
+    }
 
     let mut playable = Vec::new();
     let mut rejected = Vec::new();

@@ -5,7 +5,7 @@ import { App } from "./App";
 import "./styles.css";
 
 const root = document.getElementById("root");
-if (root === null) throw new Error("#root がない");
+if (root === null) throw new Error("no #root element");
 
 createRoot(root).render(
   <StrictMode>

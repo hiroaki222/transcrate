@@ -8,8 +8,10 @@ on:
   # publishing: the release steps are all guarded on the tag.
   workflow_dispatch:
 
+# Read by default. The four jobs that put something on the release page ask
+# for write themselves, so a build step cannot reach the repository.
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -25,6 +27,8 @@ jobs:
     # same way.
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       id: ${{ steps.create.outputs.id }}
     steps:
@@ -32,6 +36,9 @@ jobs:
         with:
           # git-cliff reads the whole history to work out what this tag added.
           fetch-depth: 0
+          # Nothing here pushes. Left set, the token stays in .git/config for
+          # every step that follows.
+          persist-credentials: false
 
       # Fetched here rather than through the action, which gave up on a bad
       # connection and took the whole release with it.
@@ -58,12 +65,14 @@ jobs:
         run: |
           set -euo pipefail
           ./git-cliff --latest --strip all > release-body.md
-          printf '\n' >> release-body.md
-          cat .github/release-notice.md >> release-body.md
 
           # An empty changelog means the tag matched no commits, which is a
-          # mistake worth stopping for rather than publishing around.
+          # mistake worth stopping for rather than publishing around. Asked
+          # after the notice is appended, this passes on the notice alone.
           test -s release-body.md
+
+          printf '\n' >> release-body.md
+          cat .github/release-notice.md >> release-body.md
 
       # A candidate is marked as one. GitHub does not read the tag, so without
       # this a `-rc1` would sit at the top of the page as the current release.
@@ -116,6 +125,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # nasm, or configure stops: without it the only way forward it offers is
       # --disable-x86asm, which is its own word for a build with no SIMD in it.
@@ -213,6 +224,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/download-artifact@v4
         with:
@@ -249,6 +262,8 @@ jobs:
       && needs.ffmpeg.result == 'success'
       && needs.ffmpeg-test.result == 'success'
       && needs.draft.result != 'failure'
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -264,6 +279,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/download-artifact@v4
         with:
@@ -327,6 +344,8 @@ jobs:
   cli:
     needs: draft
     if: github.ref_type == 'tag'
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -343,6 +362,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -383,8 +404,12 @@ jobs:
     needs: [bundle, cli]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       # Every job has uploaded by now, so there is something to show.
       - name: Take it out of draft
         env:

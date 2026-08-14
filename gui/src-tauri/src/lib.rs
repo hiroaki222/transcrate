@@ -9,14 +9,14 @@ mod tools;
 mod view;
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
 use transcrate_core::device::{self, DeviceProfile};
 use transcrate_core::files::{self, PreviousOutput};
-use transcrate_core::plan::{Action, MetadataPolicy, Target};
+use transcrate_core::plan::{self, Action, MetadataPolicy, Target};
 use transcrate_core::{convert, parallel, scan, usb};
 
 use view::{Contents, DeviceRow, Drive, Lamp, Mounted, Progress, Tools, Track};
@@ -37,7 +37,7 @@ impl Settings {
     fn target(&self) -> Result<Target, String> {
         let base = Target::by_name(&self.profile)
             .or_else(|| Target::from_format(&self.profile))
-            .ok_or_else(|| format!("{} という変換先はありません", self.profile))?;
+            .ok_or_else(|| format!("no target named {}", self.profile))?;
 
         let metadata = if self.keep_comment {
             MetadataPolicy::DJ
@@ -62,10 +62,14 @@ impl Settings {
 
         self.devices
             .iter()
-            .map(|id| device::by_id(id).ok_or_else(|| format!("{id} という機材はありません")))
+            .map(|id| device::by_id(id).ok_or_else(|| format!("no player named {id}")))
             .collect()
     }
 }
+
+/// Said of a folder the sweep could not list. Whatever audio was inside it was
+/// never planned, so without this the list simply comes back shorter.
+const UNREADABLE_FOLDER: &str = "could not be read, and nothing inside it was checked";
 
 /// One file's outcome, kept alongside the index it was given at.
 #[derive(Debug, Clone, Serialize)]
@@ -132,33 +136,34 @@ async fn inspect(
 fn examine(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<Track>, String> {
     let target = settings.target()?;
     let players = settings.players()?;
-    let inputs = gather(paths, PreviousOutput::Skip);
+    let found = gather(paths, PreviousOutput::Skip);
+    let inputs = &found.files;
 
-    let done = AtomicUsize::new(0);
+    let done = Mutex::new(0usize);
     let prepared = convert::prepare_all(
-        &inputs,
+        &found,
         None,
         &tool(FFPROBE),
         &|_| target,
         parallel::default_concurrency(),
-        &|index, _| {
-            report(
-                app,
-                "inspect",
-                done.fetch_add(1, Ordering::Relaxed) + 1,
-                inputs.len(),
-                &inputs[index],
-            );
-        },
+        &|index, _| advance(app, "inspect", &done, inputs.len(), &inputs[index]),
     );
 
-    let tracks = inputs
+    // A folder that would not open holds tracks nobody will see otherwise.
+    // Listed as itself, it says so where the tracks it hid would have been.
+    let tracks = found
+        .unreadable
         .iter()
-        .zip(prepared)
-        .map(|(input, outcome)| match outcome {
-            Ok(job) => describe(input, &job, &players),
-            Err(error) => Track::unreadable(input, error.to_string()),
-        })
+        .map(|folder| Track::unreadable(folder, UNREADABLE_FOLDER.to_owned()))
+        .chain(
+            inputs
+                .iter()
+                .zip(prepared)
+                .map(|(input, outcome)| match outcome {
+                    Ok(job) => describe(input, &job, &players),
+                    Err(error) => Track::unreadable(input, error.to_string()),
+                }),
+        )
         .collect();
 
     report(app, "inspect", inputs.len(), inputs.len(), Path::new(""));
@@ -172,8 +177,8 @@ fn describe(input: &Path, job: &convert::Job, players: &[&'static DeviceProfile]
         source: Some(job.plan.source),
         output: Some(job.plan.output),
         output_path: Some(job.output.display().to_string()),
-        action: Some(view::action_name(job.plan.action)),
         dither: matches!(job.plan.action, Action::Encode { dither: true }),
+        thin: plan::sounds_thin(&job.plan.source),
         now: view::lamps_for(&job.plan.source, players),
         after: view::lamps_for(&job.plan.output, players),
         error: None,
@@ -195,11 +200,12 @@ async fn convert_all(
 
 fn encode(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<Outcome>, String> {
     let target = settings.target()?;
-    let inputs = gather(paths, PreviousOutput::Skip);
+    let found = gather(paths, PreviousOutput::Skip);
+    let inputs = &found.files;
 
     let concurrency = parallel::default_concurrency();
     let prepared = convert::prepare_all(
-        &inputs,
+        &found,
         None,
         &tool(FFPROBE),
         &|_| target,
@@ -208,7 +214,16 @@ fn encode(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<
     );
 
     let mut jobs = Vec::new();
-    let mut failures = Vec::new();
+    let mut failures: Vec<Outcome> = found
+        .unreadable
+        .iter()
+        .map(|folder| Outcome {
+            path: folder.display().to_string(),
+            name: view::file_name(folder),
+            output_path: String::new(),
+            error: Some(UNREADABLE_FOLDER.to_owned()),
+        })
+        .collect();
 
     for (input, outcome) in inputs.iter().zip(prepared) {
         match outcome {
@@ -223,9 +238,14 @@ fn encode(app: &AppHandle, paths: &[String], settings: &Settings) -> Result<Vec<
     }
 
     let total = jobs.len();
+    let done = Mutex::new(0usize);
     let finished = |index: usize, _outcome: &Result<(), convert::ConvertError>| {
         if let Some(job) = jobs.get(index) {
-            report(app, "convert", index + 1, total, &job.input);
+            // How many have landed, not where this one sat in the list. With
+            // several encoders running, a short track further down finishes
+            // first, and its position would send the count forward and then
+            // back again.
+            advance(app, "convert", &done, total, &job.input);
         }
     };
 
@@ -345,21 +365,13 @@ fn sweep(app: &AppHandle, path: &str, settings: &Settings) -> Result<Option<Cont
     let contents = scan::walk(&root, limits);
     let total = contents.tracks.len();
 
-    let done = AtomicUsize::new(0);
+    let done = Mutex::new(0usize);
     let verdicts = scan::judge(
         &contents.tracks,
         &tool(FFPROBE),
         &players,
         parallel::default_concurrency(),
-        &|index| {
-            report(
-                app,
-                "scan",
-                done.fetch_add(1, Ordering::Relaxed) + 1,
-                total,
-                &contents.tracks[index],
-            );
-        },
+        &|index| advance(app, "scan", &done, total, &contents.tracks[index]),
     );
 
     report(app, "scan", total, total, Path::new(""));
@@ -379,6 +391,8 @@ fn sweep(app: &AppHandle, path: &str, settings: &Settings) -> Result<Option<Cont
         depth_limit: limits.folder_depth,
         entry_limit: limits.entries_per_folder,
         unreachable: contents.unreachable.iter().map(|f| relative(f)).collect(),
+        unreadable: contents.unreadable.iter().map(|f| relative(f)).collect(),
+        has_gaps: contents.has_gaps(),
         crowded: contents
             .crowded
             .iter()
@@ -405,7 +419,7 @@ fn sweep(app: &AppHandle, path: &str, settings: &Settings) -> Result<Option<Cont
     }))
 }
 
-fn gather(paths: &[String], previous: PreviousOutput) -> Vec<PathBuf> {
+fn gather(paths: &[String], previous: PreviousOutput) -> files::Found {
     let paths: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
     files::collect(&paths, previous)
 }
@@ -414,6 +428,17 @@ fn gather(paths: &[String], previous: PreviousOutput) -> Vec<PathBuf> {
 ///
 /// A folder of a few hundred tracks would otherwise sit silent while ffprobe
 /// works through it, which reads as a hang.
+/// One more finished, told to the window as it lands.
+///
+/// The count and the event go out under one lock. Counted with an atomic and
+/// emitted afterwards, two workers can take their numbers in order and reach
+/// the window in the other one, and the meter runs backwards.
+fn advance(app: &AppHandle, stage: &str, done: &Mutex<usize>, total: usize, current: &Path) {
+    let mut count = done.lock().unwrap_or_else(PoisonError::into_inner);
+    *count += 1;
+    report(app, stage, *count, total, current);
+}
+
 fn report(app: &AppHandle, stage: &str, done: usize, total: usize, current: &Path) {
     let _ = app.emit(
         stage,

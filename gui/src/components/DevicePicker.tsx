@@ -54,6 +54,7 @@ export function DevicePicker({ rows, chosen, onChange }: Props) {
   return (
     <div className="picker" ref={box}>
       <button
+        aria-expanded={open}
         className="ctl"
         data-on={open ? "" : undefined}
         onClick={() => setOpen((was) => !was)}
@@ -84,6 +85,7 @@ export function DevicePicker({ rows, chosen, onChange }: Props) {
 
               return (
                 <button
+                  aria-pressed={checked}
                   className="picker-row"
                   data-on={checked ? "" : undefined}
                   disabled={last}

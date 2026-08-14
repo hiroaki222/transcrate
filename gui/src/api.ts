@@ -34,8 +34,9 @@ export type Track = {
   source: AudioSpec | null;
   output: AudioSpec | null;
   outputPath: string | null;
-  action: "copy" | "retag" | "encode" | null;
   dither: boolean;
+  /** The source was already short of information; converting cannot help. */
+  thin: boolean;
   now: Lamp[];
   after: Lamp[];
   error: string | null;
@@ -94,6 +95,10 @@ export type Contents = {
   entryLimit: number | null;
   unreachable: string[];
   crowded: Crowded[];
+  /** Folders the walk could not list. Their contents are in no count above. */
+  unreadable: string[];
+  /** Whether anything is missing from the counts. Decided by the core. */
+  hasGaps: boolean;
   /** Only the tracks at least one player refuses. */
   failing: FailingTrack[];
 };

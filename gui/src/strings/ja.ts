@@ -11,7 +11,7 @@ export const ja = {
     lossless: {
       label: "音質を保って現場で再生",
       format: "AIFF  最大 48 kHz  24 bit",
-      note: "音質を落とさずに、10機種すべてで再生できます。",
+      note: "圧縮せずに、10機種すべてで再生できます。48 kHz を超える曲はレートを下げます。",
     },
     archive: {
       label: "保存用（再生保証なし）",
@@ -51,7 +51,6 @@ export const ja = {
     selectAll: "すべて選択",
     keepComment: "コメントを残す",
     keepArtwork: "ジャケットを残す",
-    pick: "曲を選ぶ",
     clear: "すべて外す",
     convert: (count: number) => `${count}曲を変換`,
   },
@@ -65,88 +64,84 @@ export const ja = {
   },
 
   dialog: {
-    pickTracks: "曲またはフォルダを選択",
-    pickDrive: "USBを選択",
+    pickTracks: "曲を選択",
   },
 
   done: {
     converted: (count: number) => `${count}曲を変換しました`,
     failed: (count: number) => `${count}曲は変換できませんでした`,
-    reveal: "保存先を開く",
     dismiss: "閉じる",
   },
 
   empty: {
     title: "曲またはフォルダをここにドロップ",
-    note: "フォルダを選ぶと、中の音声ファイルだけを読み込みます。",
+    note: "フォルダをドロップすると、中の音声ファイルだけを読み込みます。",
   },
 
   track: {
     unreadable: "読み込めません",
+    // What to do about it, rather than what is wrong with it. Every row here
+    // is a file about to be converted, and "再生できません" reads as a dead end
+    // for a state the conversion settles.
+    convert: "変換が必要",
     remove: "リストから外す",
     dither: "ディザ",
-    lampsNow: "NOW",
+    // Read on hover, and by anything reading the row aloud. The bitrate is
+    // already beside it; this says what that number means.
+    thin: "音質が悪いファイルです",
+    thinNote: "変換しても、元より良くはなりません。",
+    lampsNow: "変換前",
+    // Alone, with no second strip beside it, "変換前" would send the reader
+    // looking for the half that is not there.
+    lampsOnly: "現在",
     lampsAfter: "変換後",
     playsOn: (name: string) => `${name} — 再生できます`,
     failsOn: (name: string) => `${name} — 再生できません`,
     reasonCount: (count: number) => `${count}機種`,
+    // Punctuation belongs to the language, not to whichever component happens
+    // to be joining the parts up.
+    reasonDetail: (reason: string, devices: string[]) =>
+      `${reason}。${devices.join("、")}`,
   },
 
-  action: {
-    copy: "そのままコピー",
-    retag: "曲情報だけ更新",
-    encode: "変換",
-  },
-
-  verdict: {
-    allPlay: (count: number) => `${count}機種すべてで再生できます`,
-    nonePlay: (count: number) => `${count}機種すべてで再生できません`,
-    somePlay: (count: number) => `${count}機種で再生できません`,
-  },
-
+  // The subject of every one of these is the player, named alongside them.
+  // `${codec}は` made the codec the subject instead — "FLAC does not support
+  // 96,000 Hz" rather than "it does not support FLAC at 96,000 Hz" — which
+  // blames the format for a limit belonging to the hardware.
   issue: {
     codec: (codec: string) => `${codec}に対応していません`,
     sampleRate: (codec: string, hz: string) =>
-      `${codec}は${hz} Hzに対応していません`,
+      `${codec}の${hz} Hzに対応していません`,
     bitDepth: (codec: string, bits: number) =>
-      `${codec}は${bits} bitに対応していません`,
+      `${codec}の${bits} bitに対応していません`,
     bitrate: (codec: string, kbps: number, low: number, high: number) =>
-      `${codec}は${kbps} kbpsに対応していません（対応範囲：${low}〜${high} kbps）`,
+      `${codec}の${kbps} kbpsに対応していません（対応範囲：${low}〜${high} kbps）`,
   },
 
   drive: {
-    pick: "USBを選ぶ",
     picking: "接続されているUSBを探しています",
     none: "USBが見つかりません。挿してから、もう一度お試しください。",
     refresh: "再検索",
     unreadable: "どの機材も読めません",
     readOnly: "READ ONLY",
-    count: (n: number) => `${n} 枚`,
+    count: (n: number) => `${n}枚`,
     free: (n: number) => `空き ${n.toFixed(1)} GB`,
     gb: (n: number) => `${n.toFixed(1)} GB`,
     capacity: "空き容量",
     format: "ファイル形式",
     refused: "認識できない機材",
     refusedNone: "なし",
+    refusedNames: (names: string[]) => names.join("、"),
     emptyTitle: "USBを選ぶと、対応機材を確認できます",
     emptyNote: "USBには書き込みません。初期化もしません。",
     nothingMounted: (path: string) => `${path}には何もマウントされていません`,
     lamps: "認識",
     allRead: (count: number) => `${count}機種すべてがこのUSBを認識します。`,
     someFail: (count: number) => `${count}機種がこのUSBを認識しません。`,
-    failReason: (filesystem: string, names: string) =>
-      `${filesystem}を認識しません。${names}`,
-    fix: "対処",
-    fixNote: (count: number) =>
-      `FAT32で初期化すると、${count}機種すべてで認識できます。`,
   },
 
   scan: {
     title: "中身",
-    reading: (done: number, total: number) =>
-      `${done.toLocaleString()} / ${total.toLocaleString()}曲を確認中`,
-    summary: (tracks: number, folders: number, deepest: number) =>
-      `${tracks.toLocaleString()}曲、${folders.toLocaleString()}フォルダ、最大${deepest}階層`,
     otherFiles: (count: number) =>
       `ほかに${count.toLocaleString()}件、機材の一覧に出ないファイルがあります。`,
     noTracks: "曲が見つかりませんでした。",
@@ -166,6 +161,11 @@ export const ja = {
     crowdedNote: (limit: number) =>
       `1フォルダに表示されるのは${limit.toLocaleString()}件までです。`,
     crowdedEntries: (entries: number) => `${entries.toLocaleString()}件`,
+    unreadableTitle: (count: number) =>
+      `${count.toLocaleString()}フォルダが、読み取れませんでした`,
+    unreadableNote: "中身は曲数にも判定にも入っていません。",
+    // Placed under the count, where it changes how the count should be read.
+    partial: "下に挙げたフォルダの中の曲は、上の数に入っていません。",
     failingTitle: (count: number) =>
       `${count.toLocaleString()}曲に、再生できない機材があります`,
     failingNote: "CONVERTタブに入れると、変換後の判定を確認できます。",

@@ -37,7 +37,7 @@ const PROBE_ARGS: [&str; 8] = [
     "-select_streams",
     "a:0",
     "-show_entries",
-    "format=format_name:stream=codec_name,sample_rate,bits_per_raw_sample,bits_per_sample,bit_rate",
+    "format=format_name:stream=codec_name,profile,sample_rate,bits_per_raw_sample,bits_per_sample,bit_rate",
     "-print_format",
     "json",
 ];
@@ -60,11 +60,26 @@ pub fn run(ffprobe: &Path, file: &Path) -> Result<AudioSpec, ProbeError> {
 
     if !output.status.success() {
         return Err(ProbeError::Rejected {
-            stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+            stderr: why_it_failed(&output),
         });
     }
 
     parse(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// What a failed run said, or what can be said about it when it said nothing.
+///
+/// A binary that exits non-zero without writing to stderr leaves the message
+/// ending at the colon, which tells the reader only that something went wrong.
+/// The status is the one fact left, and it is the one that separates "not a
+/// media file" from "that path is not ffprobe at all".
+fn why_it_failed(output: &std::process::Output) -> String {
+    let said = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    if !said.is_empty() {
+        return said;
+    }
+
+    format!("it wrote nothing and exited with {}", output.status)
 }
 
 /// The subset of `ffprobe -print_format json` that says what a stream is.
@@ -77,6 +92,9 @@ struct ProbeOutput {
 #[derive(Deserialize)]
 struct Stream {
     codec_name: String,
+    /// Only present for codecs that have profiles, which among the ones read
+    /// here means AAC alone.
+    profile: Option<String>,
     /// Reported as a string, not a number.
     sample_rate: String,
     /// Present for formats that carry a declared depth, and the only field that
@@ -109,8 +127,12 @@ pub fn parse(probe_json: &str) -> Result<AudioSpec, ProbeError> {
         .next()
         .ok_or(ProbeError::NoAudioStream)?;
 
-    let codec = classify(&stream.codec_name, &output.format.format_name)
-        .ok_or_else(|| ProbeError::UnsupportedCodec(stream.codec_name.clone()))?;
+    let codec = classify(
+        &stream.codec_name,
+        stream.profile.as_deref(),
+        &output.format.format_name,
+    )
+    .ok_or_else(|| ProbeError::UnsupportedCodec(name_for_error(&stream)))?;
 
     let sample_rate_hz = stream
         .sample_rate
@@ -150,10 +172,15 @@ pub fn parse(probe_json: &str) -> Result<AudioSpec, ProbeError> {
 
 /// PCM carries no hint of its container — `pcm_s16be` turns up in both WAV and
 /// AIFF — so the container settles it. Everything else is named outright.
-fn classify(codec_name: &str, format_name: &str) -> Option<Codec> {
+fn classify(codec_name: &str, profile: Option<&str>, format_name: &str) -> Option<Codec> {
     match codec_name {
         "mp3" => Some(Codec::Mp3),
-        "aac" => Some(Codec::AacLc),
+        // Every manufacturer table here was written for AAC Low Complexity.
+        // The other profiles arrive under the same codec name, so trusting the
+        // name alone judges an HE-AAC file against limits belonging to a
+        // format it is not, and passes it. A stream ffprobe declines to profile
+        // is left unsupported for the same reason: not knowing is not a pass.
+        "aac" => (profile == Some("LC")).then_some(Codec::AacLc),
         "alac" => Some(Codec::Alac),
         "flac" => Some(Codec::Flac),
         name if name.starts_with("pcm_") => {
@@ -169,6 +196,16 @@ fn classify(codec_name: &str, format_name: &str) -> Option<Codec> {
     }
 }
 
+/// What to call a stream nothing here can handle. For AAC the codec name on its
+/// own would read as a contradiction — the name is supported and the profile is
+/// what was refused — so the profile is named alongside it.
+fn name_for_error(stream: &Stream) -> String {
+    match &stream.profile {
+        Some(profile) => format!("{} ({profile})", stream.codec_name),
+        None => stream.codec_name.clone(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,8 +214,9 @@ mod tests {
     // Every fixture below is verbatim output from
     //
     //   ffprobe -v error -select_streams a:0 \
-    //     -show_entries format=format_name:stream=codec_name,sample_rate,\
-    //   bits_per_raw_sample,bits_per_sample,bit_rate -print_format json FILE
+    //     -show_entries format=format_name:stream=codec_name,profile,\
+    //   sample_rate,bits_per_raw_sample,bits_per_sample,bit_rate \
+    //     -print_format json FILE
     //
     // captured from files ffmpeg 8.1.1 produced. They are not hand-written:
     // the awkward parts of this format are exactly the parts worth testing.
@@ -187,7 +225,11 @@ mod tests {
 
     const ALAC_IN_M4A: &str = r#"{"programs":[],"stream_groups":[],"streams":[{"codec_name":"alac","sample_rate":"44100","bits_per_sample":0,"bit_rate":"5440","bits_per_raw_sample":"16"}],"format":{"format_name":"mov,mp4,m4a,3gp,3g2,mj2"}}"#;
 
-    const AAC_IN_M4A: &str = r#"{"programs":[],"stream_groups":[],"streams":[{"codec_name":"aac","sample_rate":"44100","bits_per_sample":0,"bit_rate":"3441"}],"format":{"format_name":"mov,mp4,m4a,3gp,3g2,mj2"}}"#;
+    const AAC_IN_M4A: &str = r#"{"programs":[],"stream_groups":[],"streams":[{"codec_name":"aac","profile":"LC","sample_rate":"44100","bits_per_sample":0,"bit_rate":"121319"}],"format":{"format_name":"mov,mp4,m4a,3gp,3g2,mj2"}}"#;
+
+    /// The same encoder, the same container, the same codec name, and a format
+    /// no manufacturer table here covers.
+    const HE_AAC_IN_M4A: &str = r#"{"programs":[],"stream_groups":[],"streams":[{"codec_name":"aac","profile":"HE-AAC","sample_rate":"44100","bits_per_sample":0,"bit_rate":"39804"}],"format":{"format_name":"mov,mp4,m4a,3gp,3g2,mj2"}}"#;
 
     const WAV_FLOAT32_48K: &str = r#"{"programs":[],"stream_groups":[],"streams":[{"codec_name":"pcm_f32le","sample_rate":"48000","bits_per_sample":32,"bit_rate":"3072000"}],"format":{"format_name":"wav"}}"#;
 
@@ -214,6 +256,22 @@ mod tests {
         assert_eq!(parse(AAC_IN_M4A).expect("parse aac").codec, Codec::AacLc);
     }
 
+    /// Both files say `aac`, and only one of them is the format the
+    /// compatibility tables were written against. Reading the name alone put an
+    /// HE-AAC file in front of the AAC-LC limits, where its low bitrate and
+    /// 44.1 kHz cleared every one of them and it was reported as playing
+    /// everywhere.
+    #[test]
+    fn only_the_low_complexity_aac_profile_is_taken_as_aac() {
+        assert_eq!(parse(AAC_IN_M4A).expect("parse aac lc").codec, Codec::AacLc);
+
+        let refused = parse(HE_AAC_IN_M4A).expect_err("he-aac must not parse as aac-lc");
+        assert!(
+            matches!(&refused, ProbeError::UnsupportedCodec(name) if name.contains("HE-AAC")),
+            "the profile has to be named, or the message reads as a contradiction: {refused}"
+        );
+    }
+
     /// A file dragged out of a DAW. No player accepts 32-bit, so the depth has
     /// to survive parsing rather than being rounded to something plausible.
     #[test]
@@ -237,7 +295,7 @@ mod tests {
         );
     }
 
-    /// The parser reads six fields, and ffprobe only reports what it is asked
+    /// The parser reads seven fields, and ffprobe only reports what it is asked
     /// for. Dropping one from the request would leave the parser reading a
     /// field that is never there, which fails as a missing value rather than as
     /// anything that points at this list.
@@ -246,6 +304,7 @@ mod tests {
         let rendered = PROBE_ARGS.join(" ");
         for field in [
             "codec_name",
+            "profile",
             "sample_rate",
             "bits_per_raw_sample",
             "bits_per_sample",

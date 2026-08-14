@@ -18,6 +18,7 @@
   --blue: #0b84ff;
   --orange: #ff8a00;
   --red: #ff3b30;
+  --yellow: #ffcc00;
   --green: #00c853;
   --green-solid: #00a83a;
 
@@ -454,19 +455,31 @@ select {
   background: var(--green-solid);
 }
 
+/*
+  Blue, because that is the colour a player marks a selection with, but as a
+  ground rather than a flood. Filled solid, an opened row is the brightest
+  thing on a black screen and the ten lamps that are the point of it have to
+  compete with their own background.
+*/
 .row[data-sel] {
-  background: var(--blue);
+  background: linear-gradient(
+    90deg,
+    rgba(11, 132, 255, 0.22) 0%,
+    rgba(11, 132, 255, 0.11) 42%,
+    rgba(11, 132, 255, 0.06) 100%
+  );
 }
+
 
 .row[data-sel] .row-spec,
 .row[data-sel] .row-no,
 .row[data-sel] .lamps-when {
-  color: #d6e9ff;
+  color: #a8c8ea;
 }
 
 .row[data-sel] .row-doing {
-  border-color: #7fbaff;
-  color: #d6e9ff;
+  border-color: #3d7ec4;
+  color: #a8c8ea;
 }
 
 .row-main {
@@ -512,8 +525,69 @@ select {
   color: var(--red);
 }
 
-.row-judge.ok {
-  color: var(--green);
+/*
+  A mark, not a sentence. What it reports is a fact about the file rather than
+  anything to be done about it, and a worded tag beside the verdict read as a
+  second verdict. Yellow rather than red: the track plays.
+*/
+.row-thin {
+  position: relative;
+  display: flex;
+  align-items: center;
+  color: var(--yellow);
+  flex: none;
+}
+
+/*
+  No delay and no transition. The browser's own tooltip waits about a second,
+  which on a mark this small means most people never learn what it is for.
+*/
+.row-thin-say {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -8px;
+  z-index: 2;
+  display: none;
+  width: max-content;
+  max-width: 280px;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--yellow);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.65);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--w-2);
+  white-space: normal;
+  text-align: left;
+  word-break: auto-phrase;
+}
+
+.row-thin-say b {
+  display: block;
+  font-size: 12.5px;
+  color: var(--yellow);
+}
+
+.row-thin:hover .row-thin-say {
+  display: block;
+}
+
+.row-thin svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.row-thin svg path {
+  fill: none;
+}
+
+.row-thin svg circle {
+  fill: currentColor;
+  stroke: none;
 }
 
 /*
@@ -522,7 +596,6 @@ select {
   point of the screen rather than an escape from it.
 */
 .row-drop {
-  margin-left: auto;
   align-self: center;
   width: 22px;
   height: 22px;
@@ -551,14 +624,6 @@ select {
 .row-drop:disabled {
   opacity: 0;
   cursor: default;
-}
-
-.row[data-sel] .row-judge.ng {
-  color: #ffd6d4;
-}
-
-.row[data-sel] .row-judge.ok {
-  color: #c6ffd9;
 }
 
 .row-spec {
@@ -619,10 +684,6 @@ select {
   color: var(--red);
 }
 
-.why dt.fix {
-  color: var(--green);
-}
-
 .why dd {
   margin: 0;
   font-size: 12.5px;
@@ -633,33 +694,6 @@ select {
   color: #dbe9f8;
 }
 
-/* ---- drive ---- */
-.drive {
-  display: flex;
-  flex-direction: column;
-}
-
-.drive-head {
-  padding: 16px 14px;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.drive-line {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.drive-name {
-  font-family: var(--read);
-  font-size: 19px;
-  font-weight: 700;
-}
-
 .tag {
   font-family: var(--read);
   font-size: 10.5px;
@@ -668,22 +702,6 @@ select {
   padding: 3px 8px;
   border: 1px solid var(--line);
   color: var(--w-2);
-}
-
-.drive-answer {
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.drive-answer .ng {
-  color: var(--red);
-}
-
-.drive-body {
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
 }
 
 /* ---- the drives plugged in ---- */
@@ -1096,8 +1114,7 @@ table.grid td.yes {
 */
 .note,
 .empty-note,
-.why dd,
-.drive-answer {
+.why dd {
   word-break: auto-phrase;
 }
 
@@ -1451,6 +1468,58 @@ table.grid td.yes {
   font-weight: 700;
 }
 
+/*
+  A run where something was refused is not a run that went well, and the green
+  box read as one — the count of failures sat inside it. The successes are real,
+  so the box stays; what it stops doing is congratulating.
+*/
+.done[data-partial] {
+  border-color: var(--red);
+  background: rgba(255, 59, 48, 0.1);
+}
+
+.done[data-partial] .done-mark {
+  background: var(--red);
+  box-shadow: 0 0 12px rgba(255, 59, 48, 0.7);
+}
+
+/* Named under the banner: a count alone leaves the file to be found by hand. */
+.refused {
+  list-style: none;
+  margin: 0 12px;
+  padding: 8px 14px;
+  border: 1px solid var(--line-2);
+  border-top: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.refused li {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.refused-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.refused-why {
+  font-size: 11.5px;
+  color: var(--w-2);
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* ---- intake ---- */
 .drop {
   flex: 1;
@@ -1546,15 +1615,6 @@ table.grid td.yes {
 .gear[data-on] {
   color: var(--w);
   border-color: var(--line);
-}
-
-.gear svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
 }
 
 .dot {

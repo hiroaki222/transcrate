@@ -11,6 +11,7 @@ export function SettingsButton({ open, onOpen }: Props) {
 
   return (
     <button
+      aria-expanded={open}
       aria-label={t.settings.open}
       className="gear"
       data-on={open ? "" : undefined}

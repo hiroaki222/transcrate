@@ -27,7 +27,7 @@ import { DrivePanel } from "./components/DrivePanel";
 import { DropZone } from "./components/DropZone";
 import { SettingsButton } from "./components/SettingsButton";
 import { UtilityPanel } from "./components/UtilityPanel";
-import { TargetPicker } from "./components/TargetPicker";
+import { GUARANTEED, TargetPicker } from "./components/TargetPicker";
 import { TrackRow } from "./components/TrackRow";
 import type { Choice } from "./strings";
 import { StringsProvider, buttons, resolve, useStrings } from "./strings";
@@ -48,6 +48,25 @@ function remembered(): string[] | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * The result nearest the top of the output folder.
+ *
+ * A folder keeps its shape when it is converted, so the results are spread
+ * through a tree rather than sitting in one flat list. Revealing whichever
+ * happened to be first would open a folder five levels in, which is the same
+ * confusion as not opening anything: the shallowest one puts the whole set in
+ * view.
+ */
+function shallowest(outcomes: Outcome[]): string | null {
+  const done = outcomes.filter((outcome) => outcome.error === null);
+  if (done.length === 0) return null;
+
+  const depth = (path: string) => path.split(/[/\\]/).length;
+  return done.reduce((best, at) =>
+    depth(at.outputPath) < depth(best.outputPath) ? at : best,
+  ).outputPath;
 }
 
 export function App() {
@@ -178,12 +197,19 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
     };
   }, [examine]);
 
-  // Re-judge whatever is listed whenever the settings that decide it change.
+  /*
+    Re-judge whatever is listed whenever the settings that decide it change.
+
+    Keyed on `settings` rather than on the four values it is built from. Named
+    one by one, the list is the memo's dependency list written out a second
+    time: a fifth setting added to the memo and forgotten here would leave the
+    verdicts on screen answering the old question, with nothing to say so.
+  */
   useEffect(() => {
     if (dropped.length > 0 && busy === null) void examine(dropped);
-    // examine changes on every settings change, so depending on it would loop.
+    // `examine` is rebuilt on every settings change, so depending on it loops.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, keepComment, artwork, chosen]);
+  }, [settings]);
 
   /*
     The list is rewritten to what is left rather than filtered on the way out.
@@ -224,13 +250,20 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
 
     try {
       const done = await convertAll(dropped, settings);
+
+      /*
+        The list is re-read before the report goes up, not after. Examining
+        clears the last conversion's outcome on its way in — which is right
+        when a new set of tracks arrives and wrong here, where it took down
+        the report of the conversion that had just finished, along with the
+        name and reason of every track that failed.
+      */
+      await examine(dropped);
       setOutcomes(done);
 
       // Show where it landed, rather than leaving people to hunt for it.
-      const landing = done.find((outcome) => outcome.error === null)?.outputPath;
-      if (landing !== undefined) await revealItemInDir(landing);
-
-      await examine(dropped);
+      const landing = shallowest(done);
+      if (landing !== null) await revealItemInDir(landing);
     } catch (error) {
       setFailure(String(error));
     } finally {
@@ -249,9 +282,10 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
   ).length;
 
   const converted = outcomes?.filter((outcome) => outcome.error === null).length ?? 0;
+  // Named, not counted. "1 could not be converted" out of a list of forty
+  // leaves the one file that needs attention to be found by hand.
+  const refused = outcomes?.filter((outcome) => outcome.error !== null) ?? [];
 
-  const landed =
-    outcomes?.find((outcome) => outcome.error === null)?.outputPath ?? null;
   const missing = tools !== null && (!tools.ffmpeg || !tools.ffprobe);
 
   const tabs: [Tab, string][] = [
@@ -276,6 +310,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
       <nav className="tabs">
         {tabs.map(([id, label]) => (
           <button
+            aria-pressed={tab === id}
             className="tab"
             data-on={tab === id ? "" : undefined}
             key={id}
@@ -293,6 +328,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
             <DevicePicker chosen={chosen} onChange={setChosen} rows={rows} />
 
             <button
+              aria-pressed={keepComment}
               className="box-btn"
               data-on={keepComment ? "" : undefined}
               onClick={() => setKeepComment((on) => !on)}
@@ -301,6 +337,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
               {t.toolbar.keepComment}
             </button>
             <button
+              aria-pressed={artwork}
               className="box-btn"
               data-on={artwork ? "" : undefined}
               onClick={() => setArtwork((on) => !on)}
@@ -330,27 +367,22 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
 
           {failure !== null && <div className="failure">{failure}</div>}
 
-          {outcomes !== null && (
-            <div className="done">
+          {/*
+            Only when something went wrong. A conversion that worked announces
+            itself: the folder it wrote to opens, and every row on screen is
+            re-read and shows what it became. A panel saying so as well is one
+            more thing to dismiss on the way to the next set.
+          */}
+          {refused.length > 0 && (
+            <div className="done" data-partial="">
               <span className="done-mark" />
               <span className="done-text">
                 {t.done.converted(converted)}
-                {outcomes.length > converted && (
-                  <span className="done-failed">
-                    {t.done.failed(outcomes.length - converted)}
-                  </span>
-                )}
+                <span className="done-failed">
+                  {t.done.failed(refused.length)}
+                </span>
               </span>
               <span className="push" />
-              {landed !== null && (
-                <button
-                  className="box-btn"
-                  onClick={() => void revealItemInDir(landed)}
-                  type="button"
-                >
-                  {t.done.reveal}
-                </button>
-              )}
               <button
                 className="box-btn"
                 onClick={() => setOutcomes(null)}
@@ -359,6 +391,17 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
                 {t.done.dismiss}
               </button>
             </div>
+          )}
+
+          {refused.length > 0 && (
+            <ul className="refused">
+              {refused.map((outcome) => (
+                <li key={outcome.path}>
+                  <span className="refused-name">{outcome.name}</span>
+                  <span className="refused-why">{outcome.error}</span>
+                </li>
+              ))}
+            </ul>
           )}
 
           <TargetPicker onChange={setProfile} profile={profile} />
@@ -370,6 +413,7 @@ function Window({ choice, onChooseLanguage }: WindowProps) {
               {tracks.map((track, at) => (
                 <TrackRow
                   frozen={busy !== null}
+                  showAfter={!GUARANTEED.includes(profile)}
                   index={at}
                   key={track.path}
                   onRemove={() => remove(track.path)}

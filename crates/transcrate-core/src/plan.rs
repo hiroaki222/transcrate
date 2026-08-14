@@ -385,8 +385,53 @@ fn resolve(source: &AudioSpec, target: &Target) -> AudioSpec {
                 BitDepthPolicy::CapAt(bits) => source.bit_depth.map(|depth| depth.min(bits)),
             }
         },
-        bitrate_kbps: if lossy { target.bitrate_kbps } else { None },
+        // Never above what arrived. A 128 kbps MP3 re-encoded at 320 is the
+        // same music through a second encoder: it sounds worse than it did,
+        // takes two and a half times the space, and reads on the screen as an
+        // improvement. Nothing puts back what the first encoder threw away.
+        //
+        // Only against the same codec. Handed AAC and asked for MP3, the two
+        // numbers do not describe the same thing, and an encode is happening
+        // whatever this says.
+        bitrate_kbps: if lossy {
+            match (target.bitrate_kbps, source.bitrate_kbps) {
+                (Some(asked), Some(arrived)) if source.codec == target.codec => {
+                    // Capped at what arrived, but not below what every player
+                    // takes. A 24 kbps source aimed back at 24 kbps is a file a
+                    // playable target promised would play and would not — and
+                    // no encoder would have written it there anyway.
+                    let floor = crate::device::lowest_playable_kbps(target.codec)
+                        .unwrap_or(0)
+                        .min(asked);
+
+                    Some(asked.min(arrived).max(floor))
+                }
+                (asked, _) => asked,
+            }
+        } else {
+            None
+        },
     }
+}
+
+/// Below what a club system makes obvious.
+///
+/// The line the DJ pools draw, and the one under which a track played loud
+/// through a big rig stops sounding like the record and starts sounding like
+/// the file.
+pub const THIN_BITRATE_KBPS: u16 = 192;
+
+/// Whether a file was already short of information before anything was done
+/// to it.
+///
+/// Worth saying out loud, because every other number on the screen goes up
+/// during a conversion and this one cannot: a thin source converted to AIFF is
+/// a thin source that now takes forty megabytes.
+#[must_use]
+pub fn sounds_thin(source: &AudioSpec) -> bool {
+    source
+        .bitrate_kbps
+        .is_some_and(|kbps| kbps < THIN_BITRATE_KBPS)
 }
 
 /// Dither belongs to requantisation, not to resampling: it decorrelates the
@@ -409,6 +454,49 @@ mod tests {
     use super::*;
     use crate::compat::AudioSpec;
     use crate::device::Codec;
+
+    /// The cap must not take a target that promises playback below the range
+    /// the players allow. A 24 kbps MP3 aimed back at 24 kbps produced a plan
+    /// every player refused, while ffmpeg — which cannot write 24 kbps at
+    /// 44.1 kHz — quietly produced 32 and a file that played everywhere. The
+    /// screen said the conversion would not help; the conversion did.
+    #[test]
+    fn the_cap_stops_at_the_lowest_bitrate_the_players_take() {
+        let thin = AudioSpec {
+            codec: Codec::Mp3,
+            sample_rate_hz: 22_050,
+            bit_depth: None,
+            bitrate_kbps: Some(24),
+        };
+
+        let floor = crate::device::lowest_playable_kbps(Codec::Mp3).expect("mp3 has a floor");
+        let made = plan(&thin, &Target::CDJ_SAFE);
+
+        assert_eq!(made.output.bitrate_kbps, Some(floor));
+        for player in crate::device::DEVICES {
+            assert!(
+                crate::compat::check(&made.output, player).is_empty(),
+                "{} refuses what cdj-safe promised",
+                player.display_name
+            );
+        }
+    }
+
+    /// Above the floor the cap is what decides, and it never raises.
+    #[test]
+    fn a_source_above_the_floor_keeps_its_own_bitrate() {
+        let ordinary = AudioSpec {
+            codec: Codec::Mp3,
+            sample_rate_hz: 44_100,
+            bit_depth: None,
+            bitrate_kbps: Some(128),
+        };
+
+        assert_eq!(
+            plan(&ordinary, &Target::CDJ_SAFE).output.bitrate_kbps,
+            Some(128)
+        );
+    }
 
     fn wav(sample_rate_hz: u32, bits: u8) -> AudioSpec {
         AudioSpec {
