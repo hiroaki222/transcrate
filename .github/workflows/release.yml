@@ -333,9 +333,12 @@ jobs:
       # calls the app damaged and offers only the Trash — and that is invisible
       # here, where the app is never opened, until somebody downloads it.
       #
-      # The sidecars are found rather than looked for at a fixed path: where
-      # Tauri puts an externalBin inside the bundle is Tauri's business, and a
-      # check that hard-codes it fails on a bundle that is fine.
+      # The sidecars are required beside the executable rather than anywhere
+      # inside the bundle, because that is the only place the app looks:
+      # tools::locate resolves them against the directory holding the running
+      # binary and otherwise falls back to a bare name on the PATH. A copy
+      # sealed somewhere else would pass a laxer check and ship an app that
+      # tells its user ffmpeg is missing.
       - name: Check the bundle is sealed around its sidecars
         if: runner.os == 'macOS'
         shell: bash
@@ -357,13 +360,19 @@ jobs:
             exit 1
           fi
 
+          # Contents/MacOS is where the bundle format puts the executable, so
+          # it is what current_exe().parent() returns and what the app joins a
+          # tool name onto.
           for tool in ffmpeg ffprobe; do
-            found="$(find "$app" -type f -name "$tool" -print -quit 2>/dev/null || true)"
-            if [ -z "$found" ]; then
-              echo "$tool is not inside the bundle" >&2
+            if [ ! -f "$app/Contents/MacOS/$tool" ]; then
+              echo "$tool is not beside the executable in the bundle" >&2
+
+              stray="$(find "$app" -type f -name "$tool" -print -quit 2>/dev/null || true)"
+              if [ -n "$stray" ]; then
+                echo "  it is at ${stray#"$app"/}, where the app will not look" >&2
+              fi
               exit 1
             fi
-            echo "$tool: ${found#"$app"/}"
           done
 
           # --deep reaches the nested executables, --strict refuses a seal that
