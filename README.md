@@ -11,10 +11,11 @@ there is nothing else to install.
 
 ![The app, with a folder of tracks and what each one will play on](docs/images/convert.png)
 
-Each track shows ten lights, one per player, always in the same order. A second
-row shows the verdict after conversion, so you can see a rejected track turn
-green before converting anything. Failing lights are hatched as well as red, so
-reading them does not depend on colour.
+Each track shows ten lights, one per player, always in the same order. Failing
+lights are hatched as well as red, so reading them does not depend on colour.
+Under a target that makes no promise about playback a second row shows what the
+conversion would leave; under the two that do promise it, there is nothing left
+to say and the row is not drawn.
 
 There is a command line too, and a compatibility table taken from the
 manufacturers' manuals. Everything below is one of those three.
@@ -71,15 +72,20 @@ Three screens:
 
 - **CONVERT** — each row says what the file is, what it would become, and ten
   lights: one per player, green where it plays and hatched red where it will
-  not. A second row shows the verdict after conversion.
+  not. Only the rows that want something are labelled, so a list of forty is
+  scanned rather than read. A source already under 192 kbps carries a caution
+  of its own: it plays, and converting cannot put back what its first encoder
+  threw away.
 
   ![Each track with its verdict now and after converting](docs/images/convert.png)
 
-- **USB CHECK** — point it at a drive. It reports the filesystem, then reads
-  every track on it and names the ones a player will refuse. It also measures
-  the tree: the players stop at eight folder levels and list ten thousand
-  entries per folder, and past either of those a drive mounts, the tracks are
-  there, and the browser shows nothing. Read-only, and there is no format
+- **USB CHECK** — pick from the drives that are plugged in. It reports the
+  filesystem, then reads every track on the drive and names the ones a player
+  will refuse. It also measures the tree: the players stop at eight folder
+  levels and list ten thousand entries per folder, and past either of those a
+  drive mounts, the tracks are there, and the browser shows nothing. A folder
+  that could not be read is named too, and while anything is missing the
+  summary does not call the drive clean. Read-only, and there is no format
   button.
 
   ![A drive checked against every player](docs/images/usb-check.png)
@@ -121,17 +127,24 @@ and brackets are easier through the folder form, or by letting tab completion
 escape them for you.
 
 ```
-~/Music/track.flac
-  FLAC 96 kHz 24-bit -> MP3 44.1 kHz 320 kbps  (encoded)
-  ~/Music/_transcrate/track.mp3
-~/Music/already-fine.mp3
-  MP3 44.1 kHz 320 kbps -> MP3 44.1 kHz 320 kbps  (copied unchanged)
-  ~/Music/_transcrate/already-fine.mp3
+[1/3] thin.mp3 -> _transcrate/thin.mp3  (tags rewritten, audio untouched)
+[2/3] deep.flac -> _transcrate/2024/Live/deep.mp3  (encoded)
+[3/3] opener.wav -> _transcrate/opener.mp3  (encoded)
 ```
 
-Results land in a `_transcrate` folder beside each input, and the source is
-never written to. Anything already in the target format is copied rather than
-re-encoded, which is both faster and kinder to a lossy original.
+A folder handed over whole keeps its shape: one `_transcrate` beside it, and
+each track written at the depth it was read from. Files named one by one have
+no shape to keep, so each result sits beside its own source.
+
+The source is never written to. Two inputs that would produce the same output —
+`mix.wav` and `mix.flac` in one folder both ask for `mix.mp3` — are both
+refused, rather than one of them quietly overwriting the other.
+
+Anything already in the target format is copied rather than re-encoded, which
+is both faster and kinder to a lossy original. A lossy source is never
+re-encoded above the bitrate it arrived with, either: 128 kbps asked for
+`cdj-safe` comes out at 128 kbps, because the same music through a second
+encoder sounds worse than it did and takes two and a half times the space.
 
 Files convert in parallel, one per core, and each line appears as that file
 lands — fourteen 60-second 96 kHz FLACs took 2.96 s one at a time and 0.56 s
@@ -198,6 +211,15 @@ transcrate check ~/Music --failing -d cdj-3000,xdj-rr
 Failing means *any* of the named players rejects it, not all of them: a track
 that plays on nine out of ten is still the one that stops the set.
 
+A track can clear every player and still be worth knowing about:
+
+```
+Set B/thin.mp3
+  MP3 44.1 kHz 128 kbps
+  thin           under 192 kbps, and converting cannot put it back
+  plays on       CDJ-3000X, CDJ-3000, CDJ-2000NXS2, XDJ-AZ, XDJ-AN, XDJ-XZ, …
+```
+
 A counter runs on stderr while it works, and only when stderr is a terminal, so
 piping the report into a file or another program keeps it clean. It exits
 non-zero if anything is rejected, so it can gate a script.
@@ -231,7 +253,7 @@ transcrate usb /Volumes/DJ
 
   2 tracks, 1 folder, 2 deep
 
-  1 of 2 tracks will play on every player named
+  1 of the 2 tracks will play on every player named
 
   1 track at least one player will not take
     Set/02 Peak Time.m4a    XDJ-XZ: ALAC is not supported, XDJ-RX3: ALAC is …
@@ -246,6 +268,11 @@ each and the slow half — `--no-tracks` stops after the filesystem. It also
 measures the tree, because the players stop at eight folder levels and list ten
 thousand entries per folder. Past either of those the drive mounts, the tracks
 are there, and the browser shows nothing.
+
+A folder the walk could not open — permission refused, a stick pulled part way
+through — is named rather than passed over, and the count that follows says it
+covers what was found rather than what is on the drive. A run that could not
+read everything exits non-zero.
 
 **Read-only.** Nothing here writes to a drive, formats one or moves a file. A
 tool you run on your own set should not be able to damage it.
