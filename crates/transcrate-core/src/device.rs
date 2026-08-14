@@ -253,6 +253,23 @@ const FS_EXFAT_DISPUTED: &[(FileSystem, Support)] = &[
 /// four-channel units last. It follows how likely a booth is to have one rather
 /// than release date, so the machines most people are actually standing in
 /// front of come first.
+/// The lowest bitrate every player accepts for `codec`.
+///
+/// The strictest of the documented minimums: below it at least one player
+/// refuses the file, so nothing that promises playback may aim under it.
+///
+/// `None` for a codec no player lists a bitrate for, which is every lossless
+/// one.
+#[must_use]
+pub fn lowest_playable_kbps(codec: Codec) -> Option<u16> {
+    DEVICES
+        .iter()
+        .flat_map(|player| player.formats_for(codec))
+        .filter_map(|support| support.lossy)
+        .map(|limits| limits.bitrate_kbps.0)
+        .max()
+}
+
 pub const DEVICES: &[DeviceProfile] = &[
     DeviceProfile {
         id: "cdj-3000x",

@@ -36,6 +36,9 @@ jobs:
         with:
           # git-cliff reads the whole history to work out what this tag added.
           fetch-depth: 0
+          # Nothing here pushes. Left set, the token stays in .git/config for
+          # every step that follows.
+          persist-credentials: false
 
       # Fetched here rather than through the action, which gave up on a bad
       # connection and took the whole release with it.
@@ -122,6 +125,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # nasm, or configure stops: without it the only way forward it offers is
       # --disable-x86asm, which is its own word for a build with no SIMD in it.
@@ -219,6 +224,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/download-artifact@v4
         with:
@@ -272,6 +279,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/download-artifact@v4
         with:
@@ -353,6 +362,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -397,6 +408,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       # Every job has uploaded by now, so there is something to show.
       - name: Take it out of draft
         env:

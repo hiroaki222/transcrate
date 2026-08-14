@@ -180,6 +180,9 @@ pub(crate) struct Contents {
     /// Folders the walk itself could not list. Whatever is inside them is
     /// missing from every count above.
     pub(crate) unreadable: Vec<String>,
+    /// Whether any of the three lists above holds something. Answered by the
+    /// core, which is where a fourth kind of gap would be added.
+    pub(crate) has_gaps: bool,
     /// Only the tracks at least one player refuses. A stick holds thousands and
     /// the ones that work need no attention.
     pub(crate) failing: Vec<FailingTrack>,

@@ -396,7 +396,15 @@ fn resolve(source: &AudioSpec, target: &Target) -> AudioSpec {
         bitrate_kbps: if lossy {
             match (target.bitrate_kbps, source.bitrate_kbps) {
                 (Some(asked), Some(arrived)) if source.codec == target.codec => {
-                    Some(asked.min(arrived))
+                    // Capped at what arrived, but not below what every player
+                    // takes. A 24 kbps source aimed back at 24 kbps is a file a
+                    // playable target promised would play and would not — and
+                    // no encoder would have written it there anyway.
+                    let floor = crate::device::lowest_playable_kbps(target.codec)
+                        .unwrap_or(0)
+                        .min(asked);
+
+                    Some(asked.min(arrived).max(floor))
                 }
                 (asked, _) => asked,
             }
@@ -446,6 +454,49 @@ mod tests {
     use super::*;
     use crate::compat::AudioSpec;
     use crate::device::Codec;
+
+    /// The cap must not take a target that promises playback below the range
+    /// the players allow. A 24 kbps MP3 aimed back at 24 kbps produced a plan
+    /// every player refused, while ffmpeg — which cannot write 24 kbps at
+    /// 44.1 kHz — quietly produced 32 and a file that played everywhere. The
+    /// screen said the conversion would not help; the conversion did.
+    #[test]
+    fn the_cap_stops_at_the_lowest_bitrate_the_players_take() {
+        let thin = AudioSpec {
+            codec: Codec::Mp3,
+            sample_rate_hz: 22_050,
+            bit_depth: None,
+            bitrate_kbps: Some(24),
+        };
+
+        let floor = crate::device::lowest_playable_kbps(Codec::Mp3).expect("mp3 has a floor");
+        let made = plan(&thin, &Target::CDJ_SAFE);
+
+        assert_eq!(made.output.bitrate_kbps, Some(floor));
+        for player in crate::device::DEVICES {
+            assert!(
+                crate::compat::check(&made.output, player).is_empty(),
+                "{} refuses what cdj-safe promised",
+                player.display_name
+            );
+        }
+    }
+
+    /// Above the floor the cap is what decides, and it never raises.
+    #[test]
+    fn a_source_above_the_floor_keeps_its_own_bitrate() {
+        let ordinary = AudioSpec {
+            codec: Codec::Mp3,
+            sample_rate_hz: 44_100,
+            bit_depth: None,
+            bitrate_kbps: Some(128),
+        };
+
+        assert_eq!(
+            plan(&ordinary, &Target::CDJ_SAFE).output.bitrate_kbps,
+            Some(128)
+        );
+    }
 
     fn wav(sample_rate_hz: u32, bits: u8) -> AudioSpec {
         AudioSpec {

@@ -256,14 +256,10 @@ function ScanReport({ contents }: { contents: Contents | null }) {
   if (contents === null) return null;
 
   const plays = contents.tracks - contents.failing.length;
-  // Three ways a count above can be short of the drive: a folder the browser
-  // never descends into, one it stops listing part way, and one this program
-  // could not read at all. Tracks behind any of them were never counted and
-  // never judged.
-  const hasGaps =
-    contents.unreachable.length > 0 ||
-    contents.crowded.length > 0 ||
-    contents.unreadable.length > 0;
+  // Answered by the core rather than worked out again from the three lists.
+  // A fourth kind of gap added there would otherwise leave this reading two of
+  // them and calling the drive whole.
+  const hasGaps = contents.hasGaps;
 
   return (
     <section className="scan">

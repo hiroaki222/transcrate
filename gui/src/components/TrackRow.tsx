@@ -54,7 +54,11 @@ export function TrackRow({
         // Only the row itself. Enter on the remove button inside it reaches
         // here too, and would take the track out and open it in one press.
         if (event.target !== event.currentTarget) return;
-        if (event.key === "Enter" || event.key === " ") onSelect();
+        if (event.key !== "Enter" && event.key !== " ") return;
+
+        // Space scrolls the page on anything that is not really a button.
+        event.preventDefault();
+        onSelect();
       }}
       role="button"
       tabIndex={0}

@@ -97,6 +97,8 @@ export type Contents = {
   crowded: Crowded[];
   /** Folders the walk could not list. Their contents are in no count above. */
   unreadable: string[];
+  /** Whether anything is missing from the counts. Decided by the core. */
+  hasGaps: boolean;
   /** Only the tracks at least one player refuses. */
   failing: FailingTrack[];
 };

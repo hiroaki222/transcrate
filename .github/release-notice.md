@@ -12,7 +12,7 @@
 >
 > ### If it will not open the first time
 >
-> macOS and Windows warn about any app that has not been signed with a paid certificate, and this one is not signed. The warning is the only thing standing between a download and your machine, so check before you wave it past: that you are on this repository's own releases page, and that the file is the one named below. Allowed once, it opens normally from then on.
+> macOS and Windows warn about any app not signed with a paid developer certificate, and this one carries no such certificate. The warning is the only thing standing between a download and your machine, so check before you wave it past: that you are on this repository's own releases page, and that the file is the one named below. Allowed once, it opens normally from then on.
 >
 > **macOS** — System Settings → Privacy & Security → scroll to the bottom → **Open Anyway** → enter your password. [The official macOS instructions](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac)
 >

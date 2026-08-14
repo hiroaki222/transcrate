@@ -295,7 +295,7 @@ mod tests {
         );
     }
 
-    /// The parser reads six fields, and ffprobe only reports what it is asked
+    /// The parser reads seven fields, and ffprobe only reports what it is asked
     /// for. Dropping one from the request would leave the parser reading a
     /// field that is never there, which fails as a missing value rather than as
     /// anything that points at this list.
@@ -304,6 +304,7 @@ mod tests {
         let rendered = PROBE_ARGS.join(" ");
         for field in [
             "codec_name",
+            "profile",
             "sample_rate",
             "bits_per_raw_sample",
             "bits_per_sample",

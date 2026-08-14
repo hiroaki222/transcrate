@@ -37,6 +37,7 @@ export function LampStrip({ when, lamps, onBlue = false }: Props) {
               lamp.ok ? t.track.playsOn(lamp.name) : t.track.failsOn(lamp.name)
             }
             className={lamp.ok ? "lamp go" : "lamp stop"}
+            role="img"
             title={
               lamp.ok ? t.track.playsOn(lamp.name) : t.track.failsOn(lamp.name)
             }

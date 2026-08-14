@@ -229,9 +229,16 @@ fn clashes(pairs: &[Option<(&Path, &Path)>]) -> Vec<Option<Clash>> {
 /// the same comparison only ever refuses a pair that would in fact have worked,
 /// which is the safe way to be wrong about it.
 fn same_file_key(path: &Path) -> OsString {
-    // `.` and `..` first, or two spellings of one destination are two keys and
-    // the clash goes unseen.
-    let settled = files::without_dot_segments(path);
+    // Anchored, then flattened. One run can be handed both spellings of a
+    // file — `convert /Users/me/Music/a.wav a.flac` from inside that folder —
+    // and compared as written they are two keys and the clash goes unseen.
+    let anchored = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir().unwrap_or_default().join(path)
+    };
+
+    let settled = files::without_dot_segments(&anchored);
 
     if cfg!(any(target_os = "macos", target_os = "windows")) {
         OsString::from(settled.to_string_lossy().to_lowercase())
